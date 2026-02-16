@@ -1,0 +1,12 @@
+{
+  "common": {
+    "welcome": "Willkommen",
+    "getStarted": "Um zu beginnen, bearbeiten Sie die Datei page.tsx.",
+    "lookingFor": "Suchen Sie einen Ausgangspunkt oder weitere Anweisungen?",
+    "templates": "Vorlagen",
+    "learning": "Lernen",
+    "center": "Zentrum",
+    "deployNow": "Jetzt bereitstellen",
+    "documentation": "Dokumentation"
+  }
+}

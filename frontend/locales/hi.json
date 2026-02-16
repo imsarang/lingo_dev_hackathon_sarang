@@ -1,0 +1,12 @@
+{
+  "common": {
+    "welcome": "स्वागत है",
+    "getStarted": "शुरू करने के लिए, page.tsx फ़ाइल को संपादित करें।",
+    "lookingFor": "एक शुरुआती बिंदु या अधिक निर्देश खोज रहे हैं?",
+    "templates": "टेम्प्लेट",
+    "learning": "सीखना",
+    "center": "केंद्र",
+    "deployNow": "अभी तैनात करें",
+    "documentation": "प्रलेखन"
+  }
+}
