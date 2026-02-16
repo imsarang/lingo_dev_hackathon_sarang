@@ -1,0 +1,37 @@
+name: Translate
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - 'i18n.json'
+  workflow_dispatch:
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install Lingo.dev
+        run: npm install -g lingo.dev@latest
+      
+      - name: Translate
+        env:
+          OPENAI_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
+        run: lingo.dev translate
+      
+      - name: Commit translations
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add frontend/locales/*.json
+          git diff --staged --quiet || git commit -m "chore: update translations [skip ci]"
+          git push
