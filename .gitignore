@@ -1,0 +1,14 @@
+backend/node_modules
+backend/dist
+backend/.env
+backend/.env.local
+backend/.env.*.local
+backend/*.log
+backend/npm-debug.log*
+backend/.DS_Store
+backend/.gitignore
+backend/README.md
+backend/coverage
+backend/.nyc_output
+backend/.vscode
+backend/.idea

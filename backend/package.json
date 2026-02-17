@@ -7,13 +7,38 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "inspect": "ts-node src/scripts/inspect-chromadb.ts",
+    "chromadb:start": "docker-compose -f docker-compose.chromadb.yml up -d",
+    "chromadb:stop": "docker-compose -f docker-compose.chromadb.yml down",
+    "chromadb:logs": "docker-compose -f docker-compose.chromadb.yml logs -f"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "ts-node": "^10.9.0"
+    "@types/pdf-parse": "^1.1.5",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.991.0",
+    "@aws-sdk/s3-request-presigner": "^3.991.0",
+    "@chroma-core/default-embed": "^0.1.9",
+    "@google/generative-ai": "^0.24.1",
+    "@huggingface/inference": "^4.13.12",
+    "@langchain/core": "^1.1.24",
+    "@langchain/langgraph": "^1.1.4",
+    "@langchain/openai": "^1.2.7",
+    "chromadb": "^3.3.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "langchain": "^1.2.24",
+    "nodemon": "^3.1.11",
+    "openai": "^6.22.0",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^13.0.0"
   }
 }
