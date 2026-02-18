@@ -96,6 +96,21 @@ export class VectorDBClient {
             throw err
         }
     }
+
+    async queryEmbeddingsCollection(query: string, nResults: number = 1){
+        try{
+            const results = await this.collection?.query({
+                queryTexts: [query],
+                nResults,
+            })
+
+            return results
+        }
+        catch(err){
+            console.error("Error querying embeddings collection", err);
+            throw err;
+        }
+    }
 }
 
 export const vectorDBClient = new VectorDBClient("lingo-dev-collection")

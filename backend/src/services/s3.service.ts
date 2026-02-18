@@ -2,6 +2,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "stream";
+import { ExtractedPDF } from "../core/metadata";
 
 export class S3Service {
     private s3Client: S3Client | null = null
@@ -34,7 +35,6 @@ export class S3Service {
                 for await (const chunk of response.Body){
                     chunks.push(chunk)
                 }
-                console.log("Chunks created")
                 return Buffer.concat(chunks)
             }
             throw new Error("Invalid response from S3")
@@ -48,20 +48,17 @@ export class S3Service {
     async getFileText(
         bucket: string,
         key: string
-    ): Promise<string> {
+    ): Promise<ExtractedPDF> {
         try{
-            // Download file buffer
             const fileBuffer = await this.downloadFile(bucket, key)
-            console.log("Downloaded PDF buffer, size:", fileBuffer.length)
             
-            // pdf-parse automatically extracts ONLY text content
-            // Images, flowcharts, diagrams, and graphics are ignored by default
             const pdfParse = require('pdf-parse')
-            console.log("Parsing PDF (text only, images/charts ignored)...")
             const data = await pdfParse(fileBuffer)
-            console.log("Text extracted, length:", data.text.length)
             
-            return data.text
+            return {
+                text: data.text,
+                totalPages: data.numpages
+            }
         }
         catch(err){
             console.log("Error getting file text from S3", err);

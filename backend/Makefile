@@ -37,6 +37,11 @@ rag:
 		-H "Content-Type: application/json" \
 		-d '{"question":"$(Q)"}' | jq
 
+ask:
+	@curl -X POST $(API_URL)/api/question/ask \
+		-H "Content-Type: application/json" \
+		-d '{"query":"$(Q)"}' | jq
+
 delete:
 	@curl -X DELETE $(API_URL)/api/chromadb/documents \
 		-H "Content-Type: application/json" \
@@ -52,6 +57,7 @@ help:
 	@echo "  make ingest BUCKET=x KEY=y ID=z"
 	@echo "  make query Q='your question'"
 	@echo "  make rag Q='your question'  - LangGraph RAG query"
+	@echo "  make ask Q='your question'  - Intent-based query"
 	@echo "  make delete ID=doc-id"
 
-.PHONY: dev build stats count list ingest query rag delete help
+.PHONY: dev build stats count list ingest query rag ask delete help
