@@ -127,6 +127,7 @@ export class IngestController {
         }
     }
 
+    // cache routes
     async getCacheStats(req: Request, res: Response) {
         try {
             const stats = await cacheService.getCacheStats();
@@ -149,6 +150,85 @@ export class IngestController {
                 message: "Error clearing cache",
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
+        }
+    }
+
+    // rag with SSE enabled
+    async queryRAGStream(req: Request, res: Response){
+        // Set SSE headers - CRITICAL for streaming
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.setHeader('X-Accel-Buffering', 'no') // Disable nginx buffering
+        
+        // Enable CORS for SSE
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+
+        // Track if error was already sent to prevent duplicates
+        let errorSent = false
+
+        // Helper function to send SSE events
+        const sendEvent = (type: string, data: any) => {
+            // Prevent sending multiple errors
+            if (type === 'error' && errorSent) {
+                return
+            }
+            if (type === 'error') {
+                errorSent = true
+            }
+            const event = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`
+            res.write(event)
+        }
+
+        try{
+            const { question, locale } = req.body
+            let { sessionId } = req.body
+
+            if(!question){
+                sendEvent('error', { message: 'Question is required' })
+                res.end()
+                return
+            }
+
+            // Generate sessionId if not provided (first conversation)
+            if(!sessionId) {
+                sessionId = sessionService.createSession()
+                sendEvent('session', { sessionId })
+            }
+
+            // Stream the RAG process
+            await ingestionService.queryWithRAGStream(
+                question,
+                sessionId,
+                locale || 'en',
+                sendEvent // Pass callback to send events
+            )
+
+            // Only send completion if no error occurred
+            if (!errorSent) {
+                sendEvent('complete', { message: 'Stream completed' })
+            }
+            res.end()
+            
+        } catch(error){
+            // Only send error if not already sent
+            if (!errorSent) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+                // Make error message user-friendly
+                let userFriendlyMessage = 'An error occurred while processing your request.'
+                
+                if (errorMessage.includes('GPU') || errorMessage.includes('ErrorDeviceLost')) {
+                    userFriendlyMessage = 'The AI service is temporarily unavailable due to a GPU error. Please try again in a moment or restart the model server.'
+                } else if (errorMessage.includes('timeout')) {
+                    userFriendlyMessage = 'The request took too long to process. Please try again with a shorter question.'
+                } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+                    userFriendlyMessage = 'Connection error. Please check your internet connection and try again.'
+                }
+                
+                sendEvent('error', { message: userFriendlyMessage })
+            }
+            res.end()
         }
     }
 }

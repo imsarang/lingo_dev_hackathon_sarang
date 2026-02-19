@@ -213,6 +213,172 @@ export class IngestionService {
             throw error
         }
     }
+
+    // RAG with SSE streaming
+    async queryWithRAGStream(
+        question: string,
+        sessionId: string,
+        locale: string,
+        sendEvent: (type: string, data: any) => void
+    ) {
+        try {
+            // Stage 1: Check cache
+            sendEvent('status', { 
+                status: 'checking_cache',
+                message: 'Checking cache for similar questions...'
+            })
+
+            const cached = await cacheService.findSimilarCached(question, locale)
+            
+            if (cached) {
+                sendEvent('status', { 
+                    status: 'cache_hit',
+                    message: 'Found cached answer!'
+                })
+                
+                await sessionService.addMessage(sessionId, 'user', question)
+                await sessionService.addMessage(sessionId, 'assistant', cached.answer)
+                
+                // Stream cached answer word by word for smooth UX
+                const words = cached.answer.split(' ')
+                let accumulated = ''
+                for (const word of words) {
+                    accumulated += (accumulated ? ' ' : '') + word
+                    sendEvent('token', { token: word, accumulated })
+                    // Small delay for smooth streaming effect
+                    await new Promise(resolve => setTimeout(resolve, 20))
+                }
+                
+                sendEvent('complete', {
+                    answer: cached.answer,
+                    context: cached.context,
+                    contextCount: cached.context.length,
+                    sessionId,
+                    cached: true
+                })
+                return
+            }
+
+            sendEvent('status', { 
+                status: 'cache_miss',
+                message: 'Cache miss, processing query...'
+            })
+
+            // Stage 2: Translate question
+            let englishQuestion = question
+            if (locale !== 'en') {
+                sendEvent('status', { 
+                    status: 'translating',
+                    message: `Translating question from ${locale} to English...`
+                })
+                
+                const { translateService } = require('./translate.service')
+                try {
+                    englishQuestion = await translateService.translate(question, 'en')
+                } catch (error) {
+                    // Continue with original
+                }
+            }
+
+            // Stage 3: Get history
+            sendEvent('status', { 
+                status: 'loading_history',
+                message: 'Loading conversation history...'
+            })
+            
+            const history = await sessionService.getHistory(sessionId)
+            const conversationHistory = sessionService.formatHistoryForContext(history)
+            
+            await sessionService.addMessage(sessionId, 'user', englishQuestion)
+
+            // Stage 4: Retrieve documents
+            sendEvent('status', { 
+                status: 'retrieving',
+                message: 'Retrieving relevant documents...'
+            })
+
+            // Get RAG answer with streaming
+            sendEvent('status', { 
+                status: 'generating',
+                message: 'Generating answer...'
+            })
+
+            const result = await retrieverService.queryWithRAGStream(
+                englishQuestion,
+                conversationHistory,
+                (token: string, accumulated: string) => {
+                    // Send each token as it arrives
+                    sendEvent('token', { token, accumulated })
+                }
+            )
+
+            // Check if result contains an error message
+            if (result.answer && (
+                result.answer.includes('error') || 
+                result.answer.includes('Error') ||
+                result.answer.includes('GPU error') ||
+                result.answer.toLowerCase().includes('unavailable')
+            )) {
+                // If answer looks like an error, send it as error event and return
+                sendEvent('error', { message: result.answer })
+                return
+            }
+
+            // Store assistant response
+            await sessionService.addMessage(sessionId, 'assistant', result.answer)
+
+            // Stage 5: Translate answer
+            let translatedAnswer = result.answer
+            if (locale !== 'en' && result.answer) {
+                sendEvent('status', { 
+                    status: 'translating',
+                    message: `Translating answer to ${locale}...`
+                })
+                
+                const { translateService } = require('./translate.service')
+                try {
+                    translatedAnswer = await translateService.translate(result.answer, locale)
+                } catch (error) {
+                    // Use English answer
+                }
+            }
+
+            // Cache the response
+            await cacheService.cacheResponse(
+                question,
+                translatedAnswer,
+                result.context,
+                locale
+            )
+
+            // Send completion
+            sendEvent('complete', {
+                answer: translatedAnswer,
+                context: result.context,
+                contextCount: result.context.length,
+                sessionId,
+                cached: false
+            })
+
+        } catch (error) {
+            // Only send error if not already sent (prevent duplicates)
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+            
+            // Make error message user-friendly
+            let userFriendlyMessage = 'An error occurred while processing your request. Please try again.'
+            
+            if (errorMessage.includes('GPU') || errorMessage.includes('ErrorDeviceLost')) {
+                userFriendlyMessage = 'The AI service is temporarily unavailable due to a GPU error. Please try again in a moment or restart the model server.'
+            } else if (errorMessage.includes('timeout')) {
+                userFriendlyMessage = 'The request took too long to process. Please try again with a shorter question.'
+            } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+                userFriendlyMessage = 'Connection error. Please check your internet connection and try again.'
+            }
+            
+            sendEvent('error', { message: userFriendlyMessage })
+            throw error
+        }
+    }
 }
 
 export const ingestionService = new IngestionService()

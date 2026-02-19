@@ -96,9 +96,21 @@ export default function ChatInterface() {
     setInput('');
     setIsLoading(true);
 
+    // Create a placeholder bot message that we'll update
+    const botMessageId = (Date.now() + 1).toString();
+    const botMessage: Message = {
+      id: botMessageId,
+      type: 'bot',
+      content: '',
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, botMessage]);
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${apiUrl}/api/ingest/rag`, {
+      
+      // Use fetch with streaming for SSE
+      const response = await fetch(`${apiUrl}/api/ingest/rag/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,35 +123,112 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('API Error:', response.status, errorData);
-        throw new Error(errorData.error || `API Error: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      // Read the SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      // Store sessionId from backend (first time or renewed)
-      if (data.sessionId && data.sessionId !== sessionId) {
-        setSessionId(data.sessionId);
+      if (!reader) {
+        throw new Error('No reader available');
       }
 
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: data.answer || t('errors.noResponse'),
-        timestamp: new Date(),
-      };
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
 
-      setMessages((prev) => [...prev, botMessage]);
+        // Decode chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete SSE messages (ending with \n\n)
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete message in buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          // Parse SSE format: "event: type\ndata: {...}"
+          const eventMatch = line.match(/^event: (.+)$/m);
+          const dataMatch = line.match(/^data: (.+)$/m);
+
+          if (!eventMatch || !dataMatch) continue;
+
+          const eventType = eventMatch[1];
+          const data = JSON.parse(dataMatch[1]);
+
+          // Handle different event types
+          switch (eventType) {
+            case 'status':
+              // Update status (optional - you can show this in UI)
+              console.log('Status:', data.message);
+              break;
+
+            case 'token':
+              // Update bot message with accumulated text
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === botMessageId
+                    ? { ...msg, content: data.accumulated }
+                    : msg
+                )
+              );
+              break;
+
+            case 'session':
+              // Store session ID
+              if (data.sessionId && data.sessionId !== sessionId) {
+                setSessionId(data.sessionId);
+              }
+              break;
+
+            case 'complete':
+              // Final update with complete answer
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === botMessageId
+                    ? { ...msg, content: data.answer }
+                    : msg
+                )
+              );
+              
+              // Store session ID if provided
+              if (data.sessionId && data.sessionId !== sessionId) {
+                setSessionId(data.sessionId);
+              }
+              break;
+
+            case 'error':
+              // Show error - replace existing message content
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === botMessageId
+                    ? { ...msg, content: data.message || t('errors.general') }
+                    : msg
+                )
+              );
+              // Stop loading immediately on error
+              setIsLoading(false);
+              break;
+          }
+        }
+      }
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: t('errors.general'),
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      // Only update if message doesn't already have error content
+      setMessages((prev) => {
+        const existingMsg = prev.find(msg => msg.id === botMessageId);
+        if (existingMsg && existingMsg.content && !existingMsg.content.includes('error') && !existingMsg.content.includes('Error')) {
+          return prev.map((msg) =>
+            msg.id === botMessageId
+              ? { ...msg, content: t('errors.general') }
+              : msg
+          );
+        }
+        return prev;
+      });
     } finally {
       setIsLoading(false);
     }

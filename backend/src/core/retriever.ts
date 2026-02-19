@@ -32,6 +32,7 @@ export class RetrieverService {
                 maxTokens: 512,
                 maxRetries: 3,
                 timeout: 600000,
+                streaming: true, // Enable streaming support
             })
         }
     }
@@ -76,7 +77,7 @@ export class RetrieverService {
             keywords: keywords.length > 0 ? keywords : 'none'
         })
         console.log()
-        
+            
         return {companies, keywords}
     }
 
@@ -230,7 +231,7 @@ export class RetrieverService {
         // Only use filters if we have any (company or intent-based)
         const finalFilters = Object.keys(filters).length > 0 ? filters : undefined
         console.log('[RETRIEVER] Final filters:', finalFilters ? JSON.stringify(finalFilters, null, 2) : 'None (pure semantic search)')
-        
+  
         let state: RAGState = {
             question,
             context: [],
@@ -240,7 +241,7 @@ export class RetrieverService {
 
         console.log('\n[RETRIEVER] ⚙️ Executing RAG state machine...')
         const workflowStartTime = Date.now()
-        
+
         // Execute workflow steps
         while (state.step !== 'complete') {
             console.log(`[RETRIEVER] Current step: ${state.step.toUpperCase()}`)
@@ -370,6 +371,309 @@ Answer:`
                 return { ...state, answer: "Error generating answer", error: error.message, step: 'complete' }
             }
         }
+    }
+
+    // Streaming version of generateWithHistory
+    async generateWithHistoryStream(
+        state: RAGState,
+        conversationHistory: string | undefined,
+        onToken: (token: string, accumulated: string) => void
+    ): Promise<RAGState> {
+        console.log('\n[RETRIEVER] 🤖 GENERATE STREAM step started')
+        
+        try {
+            if (state.error || state.context.length === 0) {
+                console.log('[RETRIEVER] ⚠️ No context available (error or empty)')
+                return { ...state, answer: "No relevant documents found.", step: 'complete' }
+            }
+
+            const contextText = state.context.slice(0, 3).join("\n\n")
+            console.log(`[RETRIEVER] Using top 3 context chunks (${contextText.length} chars total)`)
+            
+            if (!this.llm) {
+                console.log('[RETRIEVER] ❌ No LLM configured')
+                return { ...state, answer: "No LLM configured", step: 'complete' }
+            }
+
+            // Build prompt (same as non-streaming version)
+            let prompt: string
+            if (conversationHistory && conversationHistory.trim().length > 0) {
+                console.log('[RETRIEVER] 📜 Building prompt WITH conversation history')
+                prompt = `You are a helpful AI assistant. Use the conversation history and document context to answer the question.
+
+Conversation History:
+${conversationHistory}
+
+Document Context:
+${contextText}
+
+Current Question: ${state.question}
+
+Answer (be conversational and refer to previous context when relevant):`
+            } else {
+                console.log('[RETRIEVER] 📝 Building prompt WITHOUT conversation history')
+                prompt = `Answer the following question based on the context provided.
+
+Context:
+${contextText}
+
+Question: ${state.question}
+
+Answer:`
+            }
+
+            console.log(`[RETRIEVER] Prompt length: ${prompt.length} chars`)
+            console.log('[RETRIEVER] 🔄 Calling LLM with streaming...')
+
+            // STREAMING: Use stream() instead of invoke()
+            let accumulatedAnswer = ''
+            const maxRetries = 3
+            let lastError: any = null
+
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    console.log(`[RETRIEVER] 🔄 Attempting to stream (attempt ${attempt}/${maxRetries})...`)
+                    const stream = await this.llm.stream(prompt)
+                    console.log('[RETRIEVER] ✅ Stream object created, type:', typeof stream)
+                    
+                    let chunkCount = 0
+                    let hasIterated = false
+                    
+                    // Process stream chunk by chunk
+                    try {
+                        for await (const chunk of stream) {
+                            hasIterated = true
+                            chunkCount++
+                            
+                            // Debug: Log chunk structure
+                            if (chunkCount === 1) {
+                                console.log('[RETRIEVER] 🔍 First chunk structure:', {
+                                    hasContent: !!chunk.content,
+                                    contentType: typeof chunk.content,
+                                    contentValue: chunk.content ? String(chunk.content).substring(0, 100) : 'null',
+                                    chunkKeys: Object.keys(chunk),
+                                    chunkType: chunk.constructor.name,
+                                    chunkString: JSON.stringify(chunk).substring(0, 200)
+                                })
+                            }
+                            
+                            // Handle different chunk formats
+                            let token = ''
+                            if (chunk.content !== undefined && chunk.content !== null) {
+                                token = typeof chunk.content === 'string' 
+                                    ? chunk.content 
+                                    : String(chunk.content)
+                            } else if (chunk.text !== undefined && chunk.text !== null) {
+                                token = String(chunk.text)
+                            } else if (typeof chunk === 'string') {
+                                token = chunk
+                            } else {
+                                // Try to extract text from any property
+                                const chunkStr = JSON.stringify(chunk)
+                                console.log(`[RETRIEVER] ⚠️ Unexpected chunk format (chunk ${chunkCount}):`, chunkStr.substring(0, 200))
+                                continue
+                            }
+                            
+                            if (token && token.trim().length > 0) {
+                                accumulatedAnswer += token
+                                // Call callback for each token
+                                onToken(token, accumulatedAnswer)
+                            }
+                        }
+                        
+                        if (!hasIterated) {
+                            console.log('[RETRIEVER] ⚠️ Stream iterator did not yield any chunks')
+                        }
+                    } catch (streamError: any) {
+                        console.error('[RETRIEVER] ❌ Error iterating stream:', streamError)
+                        throw streamError
+                    }
+
+                    console.log(`[RETRIEVER] ✅ LLM streaming completed (attempt ${attempt}/${maxRetries})`)
+                    console.log(`[RETRIEVER] Total chunks received: ${chunkCount}`)
+                    console.log(`[RETRIEVER] Answer length: ${accumulatedAnswer.length} chars`)
+                    
+                    // If no tokens were received, fall back to non-streaming method
+                    if (accumulatedAnswer.length === 0) {
+                        console.log('[RETRIEVER] ⚠️ No tokens received from stream, falling back to non-streaming invoke()')
+                        try {
+                            // Create a fresh LLM instance for fallback to avoid state corruption
+                            // The original instance might be in a bad state after stream() call
+                            const fallbackLLM = new ChatOpenAI({
+                                model: "llama-3.2-1b-instruct",
+                                openAIApiKey: 'lm-studio',
+                                configuration: {
+                                    baseURL: 'http://127.0.0.1:1234/v1'
+                                },
+                                temperature: 0.7,
+                                maxTokens: 512,
+                                maxRetries: 3,
+                                timeout: 600000,
+                            })
+                            
+                            console.log('[RETRIEVER] 🔄 Using fresh LLM instance for fallback invoke()')
+                            const response = await fallbackLLM.invoke(prompt)
+                            accumulatedAnswer = response.content.toString()
+                            console.log(`[RETRIEVER] ✅ Fallback invoke() successful, answer length: ${accumulatedAnswer.length} chars`)
+                            
+                            // Stream the answer word by word for smooth UX
+                            if (accumulatedAnswer && accumulatedAnswer.length > 0) {
+                                const words = accumulatedAnswer.split(' ')
+                                let streamedAnswer = ''
+                                for (const word of words) {
+                                    streamedAnswer += (streamedAnswer ? ' ' : '') + word
+                                    onToken(word + ' ', streamedAnswer)
+                                    // Small delay for smooth streaming effect
+                                    await new Promise(resolve => setTimeout(resolve, 10))
+                                }
+                            }
+                        } catch (fallbackError: any) {
+                            console.error('[RETRIEVER] ❌ Fallback invoke() also failed:', fallbackError)
+                            
+                            // Check if it's a GPU error
+                            const errorMessage = fallbackError?.message || fallbackError?.error || fallbackError?.toString() || 'Unknown error'
+                            const errorString = String(errorMessage)
+                            const isGpuError = errorString.includes('ErrorDeviceLost') || 
+                                             errorString.includes('vk::') ||
+                                             errorString.includes('device lost') ||
+                                             errorString.includes('GPU')
+                            
+                            if (isGpuError) {
+                                throw new Error(`GPU Error: ${errorString}. Please restart LM Studio or check GPU status.`)
+                            } else {
+                                throw new Error(`Streaming failed and fallback failed: ${errorString}`)
+                            }
+                        }
+                    }
+                    
+                    console.log('[RETRIEVER] Moving to COMPLETE step\n')
+                    
+                    return { ...state, answer: accumulatedAnswer, step: 'complete' }
+                } catch (retryError: any) {
+                    lastError = retryError
+                    // Check multiple error properties for GPU errors
+                    const errorMessage = retryError?.message || retryError?.error || retryError?.toString() || ''
+                    const errorString = String(errorMessage)
+                    const isGpuError = errorString.includes('ErrorDeviceLost') || 
+                                     errorString.includes('vk::') ||
+                                     errorString.includes('device lost') ||
+                                     errorString.includes('GPU')
+                    
+                    if (isGpuError && attempt < maxRetries) {
+                        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+                        console.warn(`[RETRIEVER] ⚠️ GPU error detected (attempt ${attempt}/${maxRetries}): ${errorString}`)
+                        console.log(`[RETRIEVER] 🔄 Retrying in ${waitTime}ms...`)
+                        await new Promise(resolve => setTimeout(resolve, waitTime))
+                        continue
+                    } else {
+                        throw retryError
+                    }
+                }
+            }
+
+            throw lastError || new Error('Failed to get LLM response after retries')
+        } catch (error: any) {
+            // Handle undefined error - check multiple error properties
+            const errorMessage = error?.message || error?.error || error?.toString() || 'Unknown error'
+            const errorString = String(errorMessage)
+            
+            const isGpuError = errorString.includes('ErrorDeviceLost') || 
+                             errorString.includes('vk::') ||
+                             errorString.includes('device lost') ||
+                             errorString.includes('GPU')
+            
+            if (isGpuError) {
+                console.error('[RETRIEVER] ❌ Error in GENERATE STREAM step (GPU Error):', errorString)
+                console.error('[RETRIEVER] 💡 Suggestion: Restart LM Studio or check GPU status (nvidia-smi)')
+                return { 
+                    ...state, 
+                    answer: "The AI model server encountered a GPU error. Please try again in a moment, or restart LM Studio if the issue persists.", 
+                    error: `GPU Error: ${errorString}`, 
+                    step: 'complete' 
+                }
+            } else {
+                console.error('[RETRIEVER] ❌ Error in GENERATE STREAM step:', errorString)
+                console.error('[RETRIEVER] Full error object:', error)
+                return { 
+                    ...state, 
+                    answer: `Error generating answer: ${errorString}`, 
+                    error: errorString, 
+                    step: 'complete' 
+                }
+            }
+        }
+    }
+
+    // Streaming version of queryWithRAG
+    async queryWithRAGStream(
+        question: string,
+        conversationHistory: string | undefined,
+        onToken: (token: string, accumulated: string) => void
+    ): Promise<{ answer: string, context: string[] }> {
+        // Same intent classification and filtering as before
+        const { intent } = this.classifyIntent(question)
+        const entities = this.extractEntities(question)
+        
+        const filters: Record<string, any> = {}
+        if (entities.companies.length > 0) {
+            const companyName = entities.companies[0]
+            const capitalizedCompany = companyName.charAt(0).toUpperCase() + companyName.slice(1)
+            filters.$or = [
+                { company: companyName },
+                { company: capitalizedCompany }
+            ]
+        }
+        
+        const sectionFilters: any[] = []
+        if (intent === QuestionIntent.ANALYSIS) {
+            sectionFilters.push(
+                { sectionType: 'risk_factors' },
+                { sectionType: 'financial_performance' },
+                { sectionType: 'management_discussion' }
+            )
+        } else if (intent === QuestionIntent.COMPARISON) {
+            sectionFilters.push(
+                { sectionType: 'financial_performance' },
+                { sectionType: 'management_discussion' }
+            )
+        }
+        
+        if (sectionFilters.length > 0) {
+            if (filters.$or) {
+                filters.$and = [
+                    { $or: filters.$or },
+                    { $or: sectionFilters }
+                ]
+                delete filters.$or
+            } else {
+                filters.$or = sectionFilters
+            }
+        }
+        
+        const finalFilters = Object.keys(filters).length > 0 ? filters : undefined
+
+        let state: RAGState = {
+            question,
+            context: [],
+            answer: "",
+            step: 'retrieve'
+        }
+
+        // Execute workflow
+        while (state.step !== 'complete') {
+            if (state.step === 'retrieve') {
+                state = await this.retrieve(state, finalFilters)
+            } else if (state.step === 'generate') {
+                // Use streaming version
+                state = await this.generateWithHistoryStream(
+                    state,
+                    conversationHistory,
+                    onToken
+                )
+            }
+        }
+
+        return { answer: state.answer, context: state.context }
     }
 }
 
