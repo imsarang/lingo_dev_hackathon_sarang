@@ -8,5 +8,34 @@
     "center": "center",
     "deployNow": "Deploy Now",
     "documentation": "Documentation"
+  },
+  "chat": {
+    "header": {
+      "title": "AI Assistant",
+      "subtitle": "Ask me anything about your documents",
+      "clearButton": "Clear Chat"
+    },
+    "emptyState": {
+      "title": "Start a conversation",
+      "description": "Ask questions about your documents and I'll provide detailed answers based on the content.",
+      "tryAsking": "Try asking:"
+    },
+    "input": {
+      "placeholder": "Type your message...",
+      "sendButton": "Send"
+    },
+    "errors": {
+      "noResponse": "Sorry, I could not generate a response.",
+      "general": "Sorry, I encountered an error. Please try again."
+    },
+    "loading": {
+      "thinking": "Thinking..."
+    },
+    "examples": {
+      "question1": "What are the main topics covered in the documents?",
+      "question2": "Can you summarize the key findings?",
+      "question3": "What are the recommendations mentioned?",
+      "question4": "Compare the different approaches discussed"
+    }
   }
 }

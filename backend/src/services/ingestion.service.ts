@@ -4,6 +4,8 @@ import { s3Service } from "./s3.service";
 import { retrieverService } from "../core/retriever";
 import { v4 as uuidv4 } from 'uuid'
 import { parseFilename, extractKeywords, mapSectionToIntentTags, ChunkMetadata } from "../core/metadata"
+import { sessionService } from "../services/session.service";
+import { cacheService } from "./cache.service";
 
 // Ingestion service
 export interface IngestionRequest {
@@ -110,33 +112,104 @@ export class IngestionService {
         }
     }
 
-    async queryWithRAG(question: string, locale: string = 'en') {
+    async queryWithRAG(question: string, sessionId: string, locale: string = 'en') {
+        console.log('\n[INGESTION SERVICE] Starting queryWithRAG')
+        console.log('[INGESTION SERVICE] Input params:', {
+            question: question.substring(0, 100) + (question.length > 100 ? '...' : ''),
+            sessionId,
+            locale
+        })
+        
         try {
             // Translate question to English if needed
+            // check cache
+
+            const cached = await cacheService.findSimilarCached(question, locale)
+
+            if(cached){
+                await sessionService.addMessage(sessionId, 'user', question)
+                await sessionService.addMessage(sessionId, 'assistant', cached.answer)
+                return {answer: cached.answer, context: cached.context}
+            }
+            // cache miss
+
             let englishQuestion = question
             if (locale !== 'en') {
+                console.log(`[INGESTION SERVICE] 🌐 Translating question from ${locale} to English...`)
                 const { translateService } = require('./translate.service')
                 try {
+                    const startTime = Date.now()
                     englishQuestion = await translateService.translate(question, 'en')
+                    const duration = Date.now() - startTime
+                    console.log(`[INGESTION SERVICE] ✅ Translation completed in ${duration}ms`)
+                    console.log('[INGESTION SERVICE] Translated question:', englishQuestion.substring(0, 100))
                 } catch (error) {
-                    // Use original question if translation fails
+                    console.log('[INGESTION SERVICE] ⚠️ Translation failed, using original question')
+                    console.log('[INGESTION SERVICE] Translation error:', error)
                 }
+            } else {
+                console.log('[INGESTION SERVICE] ℹ️ Locale is English, skipping translation')
             }
             
-            const result = await retrieverService.queryWithRAG(englishQuestion)
+            // Get conversation history
+            console.log('[INGESTION SERVICE] 📚 Fetching conversation history...')
+            const history = await sessionService.getHistory(sessionId)
+            console.log(`[INGESTION SERVICE] ✅ Retrieved ${history.length} messages from history`)
+            
+            const conversationHistory = sessionService.formatHistoryForContext(history)
+            console.log('[INGESTION SERVICE] Formatted history length:', conversationHistory.length, 'chars')
+            
+            // Store user question
+            console.log('[INGESTION SERVICE] 💾 Storing user question in session...')
+            await sessionService.addMessage(sessionId, 'user', englishQuestion)
+            console.log('[INGESTION SERVICE] ✅ User message stored')
+
+            // Get RAG answer
+            console.log('[INGESTION SERVICE] 🔍 Calling retrieverService.queryWithRAG...')
+            const ragStartTime = Date.now()
+            const result = await retrieverService.queryWithRAG(englishQuestion, conversationHistory)
+            const ragDuration = Date.now() - ragStartTime
+            console.log(`[INGESTION SERVICE] ✅ RAG completed in ${ragDuration}ms`)
+            console.log('[INGESTION SERVICE] RAG result:', {
+                answerLength: result.answer.length,
+                contextCount: result.context.length
+            })
+            
+            // Store assistant response (in English)
+            console.log('[INGESTION SERVICE] 💾 Storing assistant response in session...')
+            await sessionService.addMessage(sessionId, 'assistant', result.answer)
+            console.log('[INGESTION SERVICE] ✅ Assistant message stored')
             
             // Translate answer back to user's locale if needed
+            let translatedAnswer = result.answer
             if (locale !== 'en' && result.answer) {
+                console.log(`[INGESTION SERVICE] 🌐 Translating answer back to ${locale}...`)
                 const { translateService } = require('./translate.service')
                 try {
-                    result.answer = await translateService.translate(result.answer, locale)
+                    const startTime = Date.now()
+                    translatedAnswer = await translateService.translate(result.answer, locale)
+                    const duration = Date.now() - startTime
+                    console.log(`[INGESTION SERVICE] ✅ Answer translation completed in ${duration}ms`)
                 } catch (error) {
-                    // Return English answer if translation fails
+                    console.log('[INGESTION SERVICE] ⚠️ Answer translation failed, returning English')
+                    console.log('[INGESTION SERVICE] Translation error:', error)
                 }
+            } else {
+                console.log('[INGESTION SERVICE] ℹ️ Skipping answer translation (locale is English)')
             }
             
-            return result
+            console.log('[INGESTION SERVICE] ✅ queryWithRAG completed successfully\n')
+
+            // cache the response
+            await cacheService.cacheResponse(
+                question,
+                translatedAnswer,
+                result.context,
+                locale
+            )
+            return { ...result, answer: translatedAnswer }
         } catch (error) {
+            console.error('[INGESTION SERVICE] ❌ Error in queryWithRAG:', error)
             throw error
         }
     }

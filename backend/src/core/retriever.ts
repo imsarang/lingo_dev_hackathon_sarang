@@ -38,21 +38,29 @@ export class RetrieverService {
 
     // Classify intent from keywords
     classifyIntent(question: string): { intent: QuestionIntent, confidence: number } {
+        console.log('\n[RETRIEVER] Classifying intent...')
+        console.log(`[RETRIEVER] Question: ${question.substring(0, 100)}`)
+        
         const lower = question.toLowerCase()
 
         if (/compare|versus|vs|difference|between/.test(lower)) {
+            console.log('[RETRIEVER] ✅ Intent: COMPARISON (confidence: 0.9)\n')
             return { intent: QuestionIntent.COMPARISON, confidence: 0.9 }
         }
 
         if (/analyze|analysis|trend|performance|growth|evaluate/.test(lower)) {
+            console.log('[RETRIEVER] ✅ Intent: ANALYSIS (confidence: 0.9)\n')
             return { intent: QuestionIntent.ANALYSIS, confidence: 0.9 }
         }
 
         // Default to INFORMATION
+        console.log('[RETRIEVER] ✅ Intent: INFORMATION (confidence: 0.7)\n')
         return { intent: QuestionIntent.INFORMATION, confidence: 0.7 }
     }
 
     extractEntities(question: string){
+        console.log('\n[RETRIEVER] Extracting entities...')
+        
         const lower = question.toLowerCase()
         const knownCompanies = ['reliance', 'adani', 'tata', 'infosys', 'wipro']
         const companies = knownCompanies.filter(company => lower.includes(company)) // Keep lowercase
@@ -62,7 +70,13 @@ export class RetrieverService {
         if(/profit|earnings/.test(lower)) keywords.push('profit')
         if(/risk|threat/.test(lower)) keywords.push('risk')
         if(/growth|trend/.test(lower)) keywords.push('growth')
-            
+        
+        console.log('[RETRIEVER] Extracted entities:', { 
+            companies: companies.length > 0 ? companies : 'none',
+            keywords: keywords.length > 0 ? keywords : 'none'
+        })
+        console.log()
+        
         return {companies, keywords}
     }
 
@@ -91,11 +105,27 @@ export class RetrieverService {
 
     // Node 1: Retrieve
     async retrieve(state: RAGState, filters?: Record<string, any>): Promise<RAGState> {
+        console.log('\n[RETRIEVER] 📥 RETRIEVE step started')
+        console.log(`[RETRIEVER] Query: ${state.question.substring(0, 100)}`)
+        console.log('[RETRIEVER] Filters:', filters ? JSON.stringify(filters, null, 2) : 'none (semantic search only)')
+        
         try {
+            const startTime = Date.now()
             const results = await vectorDBClient.query(state.question, 5, filters)
+            const duration = Date.now() - startTime
+            
             const context = (results?.documents?.[0] || []).filter((doc: any): doc is string => doc !== null)
+            
+            console.log(`[RETRIEVER] ✅ Query completed in ${duration}ms`)
+            console.log(`[RETRIEVER] Retrieved ${context.length} documents`)
+            context.forEach((doc, idx) => {
+                console.log(`[RETRIEVER] Doc ${idx + 1} length: ${doc.length} chars`)
+            })
+            console.log('[RETRIEVER] Moving to GENERATE step\n')
+            
             return { ...state, context, step: 'generate' }
         } catch (error: any) {
+            console.error('[RETRIEVER] ❌ Error in RETRIEVE step:', error.message)
             return { ...state, context: [], error: error.message, step: 'complete' }
         }
     }
@@ -125,38 +155,82 @@ export class RetrieverService {
     }
 
     // Run RAG workflow (Graph-style state machine)
-    async queryWithRAG(question: string): Promise<{ answer: string, context: string[] }> {
+    async queryWithRAG(question: string, conversationHistory?: string): Promise<{ answer: string, context: string[] }> {
+        console.log('\n╔════════════════════════════════════════════╗')
+        console.log('║   RETRIEVER SERVICE - RAG WORKFLOW START   ║')
+        console.log('╚════════════════════════════════════════════╝')
+        console.log(`[RETRIEVER] Question: ${question.substring(0, 100)}${question.length > 100 ? '...' : ''}`)
+        console.log(`[RETRIEVER] Has conversation history: ${conversationHistory ? 'Yes (' + conversationHistory.length + ' chars)' : 'No'}`)
+        
         // 1. Classify intent (ALWAYS)
+        console.log('\n[RETRIEVER] Step 1/3: Intent Classification')
         const { intent } = this.classifyIntent(question)
         
         // 2. Extract entities (OPTIONAL - don't fail if not found)
+        console.log('[RETRIEVER] Step 2/3: Entity Extraction')
         const entities = this.extractEntities(question)
         
         // 3. Build filters: Intent is ALWAYS used, company is optional
+        console.log('[RETRIEVER] Step 3/3: Building Filters')
         const filters: Record<string, any> = {}
         
-        // Add company filter if found
+        // Add company filter if found (handle case variations: lowercase and capitalized)
         if (entities.companies.length > 0) {
-            filters.company = entities.companies[0]
+            const companyName = entities.companies[0]
+            const capitalizedCompany = companyName.charAt(0).toUpperCase() + companyName.slice(1)
+            
+            // Use $or to check both lowercase and capitalized versions
+            filters.$or = [
+                { company: companyName },
+                { company: capitalizedCompany }
+            ]
+            console.log(`[RETRIEVER] ✅ Company filter added (case-insensitive): "${companyName}" or "${capitalizedCompany}"`)
+        } else {
+            console.log('[RETRIEVER] ℹ️ No company filter (none detected)')
         }
         
         // Add intent-based section filters
+        // If we already have $or for company, we need to combine with section filters using $and
+        const sectionFilters: any[] = []
         if (intent === QuestionIntent.ANALYSIS) {
-            filters.$or = [
+            sectionFilters.push(
                 { sectionType: 'risk_factors' },
                 { sectionType: 'financial_performance' },
                 { sectionType: 'management_discussion' }
-            ]
+            )
+            console.log('[RETRIEVER] ✅ Intent-based filters added: risk_factors, financial_performance, management_discussion')
         } else if (intent === QuestionIntent.COMPARISON) {
-            filters.$or = [
+            sectionFilters.push(
                 { sectionType: 'financial_performance' },
                 { sectionType: 'management_discussion' }
-            ]
+            )
+            console.log('[RETRIEVER] ✅ Intent-based filters added: financial_performance, management_discussion')
+        } else {
+            console.log('[RETRIEVER] ℹ️ No intent-based filters (INFORMATION intent)')
+        }
+        
+        // Combine company and section filters properly
+        if (sectionFilters.length > 0) {
+            if (filters.$or) {
+                // We have both company and section filters - need to combine with $and
+                // Company filter: $or with company names
+                // Section filter: $or with section types
+                // Combined: $and with both $or conditions
+                filters.$and = [
+                    { $or: filters.$or }, // Company filter
+                    { $or: sectionFilters } // Section filter
+                ]
+                delete filters.$or // Remove the standalone $or since it's now in $and
+            } else {
+                // Only section filters, use $or
+                filters.$or = sectionFilters
+            }
         }
         
         // Only use filters if we have any (company or intent-based)
         const finalFilters = Object.keys(filters).length > 0 ? filters : undefined
-  
+        console.log('[RETRIEVER] Final filters:', finalFilters ? JSON.stringify(finalFilters, null, 2) : 'None (pure semantic search)')
+        
         let state: RAGState = {
             question,
             context: [],
@@ -164,16 +238,138 @@ export class RetrieverService {
             step: 'retrieve'
         }
 
+        console.log('\n[RETRIEVER] ⚙️ Executing RAG state machine...')
+        const workflowStartTime = Date.now()
+        
         // Execute workflow steps
         while (state.step !== 'complete') {
+            console.log(`[RETRIEVER] Current step: ${state.step.toUpperCase()}`)
+            
             if (state.step === 'retrieve') {
                 state = await this.retrieve(state, finalFilters)
             } else if (state.step === 'generate') {
-                state = await this.generate(state)
+                // state = await this.generate(state)
+                state = await this.generateWithHistory(state, conversationHistory)
             }
         }
 
+        const workflowDuration = Date.now() - workflowStartTime
+        console.log(`\n[RETRIEVER] ✅ RAG workflow completed in ${workflowDuration}ms`)
+        console.log(`[RETRIEVER] Answer length: ${state.answer.length} chars`)
+        console.log(`[RETRIEVER] Context chunks: ${state.context.length}`)
+        console.log('╔════════════════════════════════════════════╗')
+        console.log('║   RETRIEVER SERVICE - RAG WORKFLOW END     ║')
+        console.log('╚════════════════════════════════════════════╝\n')
+
         return { answer: state.answer, context: state.context }
+    }
+
+    async generateWithHistory(state: RAGState, conversationHistory?: string): Promise<RAGState> {
+        console.log('\n[RETRIEVER] 🤖 GENERATE step started')
+        
+        try{
+            if (state.error || state.context.length === 0) {
+                console.log('[RETRIEVER] ⚠️ No context available (error or empty)')
+                return { ...state, answer: "No relevant documents found.", step: 'complete' }
+            }
+
+            const contextText = state.context.slice(0, 3).join("\n\n")
+            console.log(`[RETRIEVER] Using top 3 context chunks (${contextText.length} chars total)`)
+            
+            let answer: string
+            if (!this.llm) {
+                console.log('[RETRIEVER] ❌ No LLM configured')
+                return { ...state, answer: "No LLM configured", step: 'complete' }
+            }
+            
+            // Build better prompt with or without history
+            let prompt: string
+            if (conversationHistory && conversationHistory.trim().length > 0) {
+                console.log('[RETRIEVER] 📜 Building prompt WITH conversation history')
+                prompt = `You are a helpful AI assistant. Use the conversation history and document context to answer the question.
+
+Conversation History:
+${conversationHistory}
+
+Document Context:
+${contextText}
+
+Current Question: ${state.question}
+
+Answer (be conversational and refer to previous context when relevant):`
+            } else {
+                console.log('[RETRIEVER] 📝 Building prompt WITHOUT conversation history')
+                prompt = `Answer the following question based on the context provided.
+
+Context:
+${contextText}
+
+Question: ${state.question}
+
+Answer:`
+            }
+            
+            console.log(`[RETRIEVER] Prompt length: ${prompt.length} chars`)
+            console.log('[RETRIEVER] 🔄 Calling LLM...')
+            
+            // Retry logic for GPU errors (Vulkan ErrorDeviceLost)
+            const maxRetries = 3
+            let lastError: any = null
+            let response: any = null
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const llmStartTime = Date.now()
+                    response = await this.llm.invoke(prompt)
+                    const llmDuration = Date.now() - llmStartTime
+                    
+                    answer = response.content.toString()
+                    console.log(`[RETRIEVER] ✅ LLM response received in ${llmDuration}ms (attempt ${attempt}/${maxRetries})`)
+                    console.log(`[RETRIEVER] Answer length: ${answer.length} chars`)
+                    console.log(`[RETRIEVER] Answer preview: ${answer.substring(0, 100)}${answer.length > 100 ? '...' : ''}`)
+                    console.log('[RETRIEVER] Moving to COMPLETE step\n')
+                    
+                    return { ...state, answer, step: 'complete' }
+                } catch (retryError: any) {
+                    lastError = retryError
+                    const isGpuError = retryError.message?.includes('ErrorDeviceLost') || 
+                                     retryError.message?.includes('vk::') ||
+                                     retryError.message?.includes('device lost')
+                    
+                    if (isGpuError && attempt < maxRetries) {
+                        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // Exponential backoff, max 5s
+                        console.warn(`[RETRIEVER] ⚠️ GPU error detected (attempt ${attempt}/${maxRetries}): ${retryError.message}`)
+                        console.log(`[RETRIEVER] 🔄 Retrying in ${waitTime}ms...`)
+                        await new Promise(resolve => setTimeout(resolve, waitTime))
+                        continue
+                    } else {
+                        throw retryError
+                    }
+                }
+            }
+            
+            // Should not reach here, but just in case
+            throw lastError || new Error('Failed to get LLM response after retries')
+        }
+        catch(error: any){
+            const isGpuError = error.message?.includes('ErrorDeviceLost') || 
+                             error.message?.includes('vk::') ||
+                             error.message?.includes('device lost')
+            
+            if (isGpuError) {
+                console.error('[RETRIEVER] ❌ Error in GENERATE step (GPU Error):', error.message)
+                console.error('[RETRIEVER] 💡 Suggestion: Restart lm-studio or check GPU status (nvidia-smi)')
+                return { 
+                    ...state, 
+                    answer: "The AI model server encountered a GPU error. Please try again or restart the model server.", 
+                    error: `GPU Error: ${error.message}`, 
+                    step: 'complete' 
+                }
+            } else {
+                console.error('[RETRIEVER] ❌ Error in GENERATE step:', error.message)
+                return { ...state, answer: "Error generating answer", error: error.message, step: 'complete' }
+            }
+        }
     }
 }
 

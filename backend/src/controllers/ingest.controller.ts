@@ -1,5 +1,7 @@
 import { IngestionRequest, ingestionService } from "../services/ingestion.service";
 import { Request, Response } from "express";
+import { sessionService } from "../services/session.service";
+import { cacheService } from "../services/cache.service";
 
 // Ingestion controller
 export class IngestController {
@@ -62,32 +64,91 @@ export class IngestController {
         req: Request,
         res: Response
     ){
+        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.log('[CONTROLLER] RAG Query Started')
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        
         try{
             const { question, locale } = req.body
+            let { sessionId } = req.body
+
+            console.log('[CONTROLLER] Request params:', {
+                question: question?.substring(0, 100) + (question?.length > 100 ? '...' : ''),
+                locale: locale || 'en',
+                sessionId: sessionId || 'none (will create new)'
+            })
 
             if(!question){
+                console.log('[CONTROLLER] ❌ Validation failed: Question is required')
                 return res.status(400).json({
                     message: "Question is required"
                 })
             }
 
+            // Generate sessionId if not provided (first conversation)
+            if(!sessionId) {
+                sessionId = sessionService.createSession()
+                console.log(`[CONTROLLER] ✅ New session created: ${sessionId}`)
+            } else {
+                console.log(`[CONTROLLER] 🔄 Using existing session: ${sessionId}`)
+            }
 
-            const result = await ingestionService.queryWithRAG(question, locale || 'en')
+            console.log('[CONTROLLER] 📞 Calling ingestionService.queryWithRAG...')
+            const startTime = Date.now()
+            const result = await ingestionService.queryWithRAG(question, sessionId, locale || 'en')
+            const duration = Date.now() - startTime
 
+            console.log(`[CONTROLLER] ✅ RAG Query completed in ${duration}ms`)
+            console.log('[CONTROLLER] Response summary:', {
+                answerLength: result.answer.length,
+                contextCount: result.context.length,
+                sessionId
+            })
 
             res.status(200).json({
                 question,
                 answer: result.answer,
                 contextCount: result.context.length,
-                context: result.context.slice(0, 3)
+                context: result.context.slice(0, 3),
+                sessionId: sessionId
             })
+            
+            console.log('[CONTROLLER] ✅ Response sent successfully')
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
         }
         catch(error){
+            console.error('[CONTROLLER] ❌ Error in RAG query:')
+            console.error('[CONTROLLER] Error details:', error)
             console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
             res.status(500).json({
                 message: "Error in RAG query",
                 error: error instanceof Error ? error.message : 'Unknown error'
             })
+        }
+    }
+
+    async getCacheStats(req: Request, res: Response) {
+        try {
+            const stats = await cacheService.getCacheStats();
+            res.status(200).json(stats);
+        } catch (error) {
+            res.status(500).json({
+                message: "Error getting cache stats",
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+    
+    async clearCache(req: Request, res: Response) {
+        try {
+            const { locale } = req.body;
+            await cacheService.clearCache(locale);
+            res.status(200).json({ message: 'Cache cleared successfully' });
+        } catch (error) {
+            res.status(500).json({
+                message: "Error clearing cache",
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
         }
     }
 }

@@ -42,6 +42,11 @@ ask:
 		-H "Content-Type: application/json" \
 		-d '{"query":"$(Q)"}' | jq
 
+clear-cache:
+	@curl -X POST $(API_URL)/api/ingest/cache/clear \
+		-H "Content-Type: application/json" \
+		-d '{}' | jq
+
 delete:
 	@curl -X DELETE $(API_URL)/api/chromadb/documents \
 		-H "Content-Type: application/json" \
@@ -63,7 +68,8 @@ help:
 	@echo "  make query Q='your question'"
 	@echo "  make rag Q='your question'  - LangGraph RAG query"
 	@echo "  make ask Q='your question'  - Intent-based query"
+	@echo "  make clear-cache      - Clear Redis cache"
 	@echo "  make delete ID=doc-id"
 	@echo "  make clean-db         - Delete all ChromaDB data"
 
-.PHONY: dev build stats count list ingest query rag ask delete clean-db help
+.PHONY: dev build stats count list ingest query rag ask clear-cache delete clean-db help

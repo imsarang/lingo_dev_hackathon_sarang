@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import ExampleQuestions from './ExampleQuestions';
 
 interface Message {
@@ -11,13 +12,56 @@ interface Message {
   timestamp: Date;
 }
 
+const STORAGE_KEY = 'chat_messages';
+const SESSION_KEY = 'chat_session_id';
+
 export default function ChatInterface() {
   const params = useParams();
   const locale = params.locale as string || 'en';
+  const t = useTranslations('chat'); // Add this line
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [sessionId, setSessionId] = useState<string | null> (null);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load messages from localStorage on mount
+  useEffect(() => {
+    const savedMessages = localStorage.getItem(STORAGE_KEY);
+    const savedSessionId = localStorage.getItem(SESSION_KEY);
+    
+    if (savedMessages) {
+      try {
+        const parsed = JSON.parse(savedMessages);
+        // Convert timestamp strings back to Date objects
+        const messagesWithDates = parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(messagesWithDates);
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      }
+    }
+    
+    if (savedSessionId) {
+      setSessionId(savedSessionId);
+    }
+  }, []);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Save sessionId to localStorage whenever it changes
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem(SESSION_KEY, sessionId);
+    }
+  }, [sessionId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -29,6 +73,13 @@ export default function ChatInterface() {
 
   const handleQuestionClick = (question: string) => {
     setInput(question);
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    setSessionId(null);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_KEY);
   };
 
   const sendMessage = async (messageContent: string) => {
@@ -54,7 +105,8 @@ export default function ChatInterface() {
         },
         body: JSON.stringify({ 
           question: messageContent,
-          locale: locale 
+          locale: locale,
+          sessionId: sessionId  // Will be null on first request
         }),
       });
 
@@ -66,10 +118,15 @@ export default function ChatInterface() {
 
       const data = await response.json();
 
+      // Store sessionId from backend (first time or renewed)
+      if (data.sessionId && data.sessionId !== sessionId) {
+        setSessionId(data.sessionId);
+      }
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: data.answer || 'Sorry, I could not generate a response.',
+        content: data.answer || t('errors.noResponse'),
         timestamp: new Date(),
       };
 
@@ -79,7 +136,7 @@ export default function ChatInterface() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: t('errors.general'),
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -93,13 +150,26 @@ export default function ChatInterface() {
     await sendMessage(input);
   };
 
-  return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-white dark:bg-zinc-900">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg">
-        <h1 className="text-2xl font-bold">AI Assistant</h1>
-        <p className="text-blue-100 text-sm mt-1">Ask me anything about your documents</p>
-      </div>
+    return (
+      <div className="flex flex-col h-screen max-w-4xl mx-auto bg-white dark:bg-zinc-900">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">{t('header.title')}</h1>
+              <p className="text-blue-100 text-sm mt-1">{t('header.subtitle')}</p>
+            </div>
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium"
+                title={t('header.clearButton')}
+              >
+                {t('header.clearButton')}
+              </button>
+            )}
+          </div>
+        </div>
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-50 dark:bg-zinc-950">
@@ -121,10 +191,10 @@ export default function ChatInterface() {
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 mb-2">
-              Start a conversation
+              {t('emptyState.title')}
             </h2>
             <p className="text-zinc-600 dark:text-zinc-400 max-w-md mb-6">
-              Ask questions about your documents and I'll provide detailed answers based on the content.
+              {t('emptyState.description')}
             </p>
             <div className="max-w-md w-full">
               <ExampleQuestions onQuestionClick={handleQuestionClick} />
@@ -181,7 +251,7 @@ export default function ChatInterface() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
+            placeholder={t('input.placeholder')}
             disabled={isLoading}
             className="flex-1 px-4 py-3 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200 placeholder-zinc-500 disabled:opacity-50"
           />

@@ -1,21 +1,25 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 interface ExampleQuestionsProps {
   onQuestionClick: (question: string) => void;
 }
 
-const EXAMPLE_QUESTIONS = [
-  "What are the main topics covered in the documents?",
-  "Can you summarize the key findings?",
-  "What are the recommendations mentioned?",
-  "Compare the different approaches discussed",
-];
-
 export default function ExampleQuestions({ onQuestionClick }: ExampleQuestionsProps) {
+  const t = useTranslations('chat');
+  
+  const EXAMPLE_QUESTIONS = [
+    t('examples.question1'),
+    t('examples.question2'),
+    t('examples.question3'),
+    t('examples.question4'),
+  ];
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium">
-        Try asking:
+        {t('emptyState.tryAsking')}
       </p>
       <div className="grid grid-cols-1 gap-2">
         {EXAMPLE_QUESTIONS.map((question, index) => (
