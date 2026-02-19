@@ -1,4 +1,4 @@
-name: Translate
+name: Lingo.dev Translate
 
 on:
   push:
@@ -14,24 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           
-      - name: Install Lingo.dev
-        run: npm install -g lingo.dev@latest
-      
-      - name: Translate
+      - name: Run Lingo.dev CI
         env:
           OPENAI_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
-        run: lingo.dev translate
+        run: npx lingo.dev@latest ci --no-interactive
       
       - name: Commit translations
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add frontend/locales/*.json
-          git diff --staged --quiet || git commit -m "chore: update translations [skip ci]"
-          git push
+          git add frontend/locales/*.json || true
+          git diff --staged --quiet || git commit -m "chore: update translations [skip ci]" || true
+          git push || echo "Nothing to push"

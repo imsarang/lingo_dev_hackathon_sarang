@@ -26,7 +26,6 @@ export class IngestController {
             res.status(200).json(ingestionResponse)
         }
         catch(error){
-            console.error("Error ingesting document from S3", error);
             res.status(500).json({
                 message: "Error ingesting document from S3",
                 error: error instanceof Error ? error.message : 'Unknown error'
@@ -51,7 +50,6 @@ export class IngestController {
             res.status(200).json(queryResponse)
         }
         catch(error){
-            console.error("Error querying documents", error);
             res.status(500).json({
                 message: "Error querying documents",
                 error: error instanceof Error ? error.message : 'Unknown error'
@@ -59,13 +57,13 @@ export class IngestController {
         }
     }
 
-    // LangGraph RAG endpoint
+    // LangGraph RAG endpoint with translation support
     async queryRAG(
         req: Request,
         res: Response
     ){
         try{
-            const { question } = req.body
+            const { question, locale } = req.body
 
             if(!question){
                 return res.status(400).json({
@@ -73,8 +71,9 @@ export class IngestController {
                 })
             }
 
-            console.log(`RAG Query: ${question}`)
-            const result = await ingestionService.queryWithRAG(question)
+
+            const result = await ingestionService.queryWithRAG(question, locale || 'en')
+
 
             res.status(200).json({
                 question,
@@ -84,7 +83,7 @@ export class IngestController {
             })
         }
         catch(error){
-            console.error("Error in RAG query", error);
+            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
             res.status(500).json({
                 message: "Error in RAG query",
                 error: error instanceof Error ? error.message : 'Unknown error'

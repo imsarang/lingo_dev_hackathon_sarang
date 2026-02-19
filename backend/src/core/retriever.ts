@@ -2,6 +2,7 @@
 import { ChatOpenAI } from "@langchain/openai"
 import { vectorDBClient } from "../db/client"
 import { QuestionIntent } from "./metadata"
+import { InferenceClient } from "@huggingface/inference"
 
 // State for RAG workflow
 interface RAGState {
@@ -17,18 +18,44 @@ export class RetrieverService {
 
     constructor() {
         // Initialize LLM if OpenAI is available
-        if (process.env.OPENAI_API_KEY) {
+        // if(!this.llm){
+        //     this.llm = new InferenceClient(process.env.HUGGINGFACE_API_KEY as string)
+        // }
+        if(!this.llm){
             this.llm = new ChatOpenAI({
-                modelName: "gpt-3.5-turbo",
-                temperature: 0.7
+                model: "llama-3.2-1b-instruct",
+                openAIApiKey: 'lm-studio',
+                configuration: {
+                    baseURL: 'http://127.0.0.1:1234/v1'
+                },
+                temperature: 0.7,
+                maxTokens: 512,
+                maxRetries: 3,
+                timeout: 600000,
             })
         }
+    }
+
+    // Classify intent from keywords
+    classifyIntent(question: string): { intent: QuestionIntent, confidence: number } {
+        const lower = question.toLowerCase()
+
+        if (/compare|versus|vs|difference|between/.test(lower)) {
+            return { intent: QuestionIntent.COMPARISON, confidence: 0.9 }
+        }
+
+        if (/analyze|analysis|trend|performance|growth|evaluate/.test(lower)) {
+            return { intent: QuestionIntent.ANALYSIS, confidence: 0.9 }
+        }
+
+        // Default to INFORMATION
+        return { intent: QuestionIntent.INFORMATION, confidence: 0.7 }
     }
 
     extractEntities(question: string){
         const lower = question.toLowerCase()
         const knownCompanies = ['reliance', 'adani', 'tata', 'infosys', 'wipro']
-        const companies = knownCompanies.filter(company => lower.includes(company))
+        const companies = knownCompanies.filter(company => lower.includes(company)) // Keep lowercase
 
         const keywords = []
         if(/revenue|sales|income/.test(lower)) keywords.push('revenue')
@@ -39,7 +66,7 @@ export class RetrieverService {
         return {companies, keywords}
     }
 
-    buildFilters(intent: string, entities: any){
+    buildFilters(intent: string, entities: any): Record<string, any> | undefined {
         const filters: Record<string, any> = {}
 
         if(entities.companies.length > 0) filters.company = entities.companies[0]
@@ -57,29 +84,24 @@ export class RetrieverService {
                 { sectionType: 'management_discussion' }
             ]
         }
-        else {
-            // no filter
-        }
-        return filters
+        
+        // Return undefined if no filters (pure semantic search!)
+        return Object.keys(filters).length > 0 ? filters : undefined
     }
 
     // Node 1: Retrieve
-    async retrieve(state: RAGState): Promise<RAGState> {
-        console.log(`[RETRIEVE] ${state.question}`)
+    async retrieve(state: RAGState, filters?: Record<string, any>): Promise<RAGState> {
         try {
-            const results = await vectorDBClient.query(state.question, 5)
+            const results = await vectorDBClient.query(state.question, 5, filters)
             const context = (results?.documents?.[0] || []).filter((doc: any): doc is string => doc !== null)
-            console.log(`[RETRIEVE] Found ${context.length} docs`)
             return { ...state, context, step: 'generate' }
         } catch (error: any) {
-            console.error("[RETRIEVE] Error:", error.message)
             return { ...state, context: [], error: error.message, step: 'complete' }
         }
     }
 
     // Node 2: Generate
     async generate(state: RAGState): Promise<RAGState> {
-        console.log(`[GENERATE] Creating answer`)
         try {
             if (state.error || state.context.length === 0) {
                 return { ...state, answer: "No relevant documents found.", step: 'complete' }
@@ -98,18 +120,42 @@ export class RetrieverService {
 
             return { ...state, answer, step: 'complete' }
         } catch (error: any) {
-            console.error("[GENERATE] Error:", error.message)
             return { ...state, answer: "Error generating answer", error: error.message, step: 'complete' }
         }
     }
 
     // Run RAG workflow (Graph-style state machine)
-    async queryWithRAG(question: string, intent?: string, filters?: Record<string, any>): Promise<{ answer: string, context: string[] }> {
-        console.log("\n=== RAG Workflow (State Machine) ===")
+    async queryWithRAG(question: string): Promise<{ answer: string, context: string[] }> {
+        // 1. Classify intent (ALWAYS)
+        const { intent } = this.classifyIntent(question)
         
+        // 2. Extract entities (OPTIONAL - don't fail if not found)
         const entities = this.extractEntities(question)
-
-        const finalFilters = filters || this.buildFilters(intent || QuestionIntent.INFORMATION, entities)
+        
+        // 3. Build filters: Intent is ALWAYS used, company is optional
+        const filters: Record<string, any> = {}
+        
+        // Add company filter if found
+        if (entities.companies.length > 0) {
+            filters.company = entities.companies[0]
+        }
+        
+        // Add intent-based section filters
+        if (intent === QuestionIntent.ANALYSIS) {
+            filters.$or = [
+                { sectionType: 'risk_factors' },
+                { sectionType: 'financial_performance' },
+                { sectionType: 'management_discussion' }
+            ]
+        } else if (intent === QuestionIntent.COMPARISON) {
+            filters.$or = [
+                { sectionType: 'financial_performance' },
+                { sectionType: 'management_discussion' }
+            ]
+        }
+        
+        // Only use filters if we have any (company or intent-based)
+        const finalFilters = Object.keys(filters).length > 0 ? filters : undefined
   
         let state: RAGState = {
             question,
@@ -121,13 +167,12 @@ export class RetrieverService {
         // Execute workflow steps
         while (state.step !== 'complete') {
             if (state.step === 'retrieve') {
-                state = await this.retrieve(state)
+                state = await this.retrieve(state, finalFilters)
             } else if (state.step === 'generate') {
                 state = await this.generate(state)
             }
         }
 
-        console.log("=== Workflow Complete ===\n")
         return { answer: state.answer, context: state.context }
     }
 }

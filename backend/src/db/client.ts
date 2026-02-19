@@ -23,10 +23,8 @@ export class VectorDBClient {
                 }
                 // ChromaDB will use default embedding function to auto-generate embeddings
             })
-            console.log(`Collection ${this.collectionName} initialized`);
         }
         catch(err){
-            console.log("Error initializing Chroma client", err);
             throw err
         }
     }
@@ -53,16 +51,14 @@ export class VectorDBClient {
             }
             
             await this.collection?.add(addParams)
-            console.log(`Added ${documents.length} documents to collection ${this.collectionName}`);
         }
         catch(err){
-            console.log("Error adding documents to Chroma client", err);
             throw err
         }
     }
 
     async query(
-        queryText: string,  // Now accepts text instead of embeddings
+        queryText: string,
         nResults: number = 5,
         filter?: Record<string, any>
     ){
@@ -70,16 +66,24 @@ export class VectorDBClient {
             await this.initialize()
         }
         try{
-            const results = await this.collection?.query({
-                queryTexts: [queryText],  // ChromaDB will generate embeddings automatically
-                nResults,
-                where:filter,
-            })
-            console.log(`Found ${results?.documents.length} results for query`);
+            
+            const queryParams: any = {
+                queryTexts: [queryText],
+                nResults
+            }
+            
+            // Only add 'where' if filter is provided and not empty
+            if (filter && Object.keys(filter).length > 0) {
+                queryParams.where = filter
+            }
+            
+            const results = await this.collection?.query(queryParams)
+            
+            const docCount = results?.documents?.[0]?.length || 0
+            
             return results
         }
         catch(err){
-            console.log("Error querying Chroma client", err);
             throw err
         }
     }
@@ -89,10 +93,8 @@ export class VectorDBClient {
             await this.client?.deleteCollection({
                 name: this.collectionName,
             })
-            console.log(`Deleted collection ${this.collectionName}`);
         }
         catch(err){
-            console.log("Error deleting collection", err);
             throw err
         }
     }
@@ -107,7 +109,6 @@ export class VectorDBClient {
             return results
         }
         catch(err){
-            console.error("Error querying embeddings collection", err);
             throw err;
         }
     }

@@ -47,6 +47,11 @@ delete:
 		-H "Content-Type: application/json" \
 		-d '{"filter":{"documentId":"$(ID)"}}' | jq
 
+clean-db:
+	@echo "Deleting ChromaDB data..."
+	@rm -rf chroma_data
+	@echo "ChromaDB cleared! Restart ChromaDB server."
+
 # Help
 help:
 	@echo "Commands:"
@@ -59,5 +64,6 @@ help:
 	@echo "  make rag Q='your question'  - LangGraph RAG query"
 	@echo "  make ask Q='your question'  - Intent-based query"
 	@echo "  make delete ID=doc-id"
+	@echo "  make clean-db         - Delete all ChromaDB data"
 
-.PHONY: dev build stats count list ingest query rag ask delete help
+.PHONY: dev build stats count list ingest query rag ask delete clean-db help

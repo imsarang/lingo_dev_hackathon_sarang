@@ -74,15 +74,18 @@ export function extractKeywords(text: string): string[] {
         }
     }
     
-    return keywords
+    // ChromaDB doesn't allow empty arrays in metadata
+    return keywords.length > 0 ? keywords : ['general']
 }
 
 // Map section to intent tags
 export function mapSectionToIntentTags(sectionType: string): string[] {
-    return INTENT_TAGS[sectionType] || INTENT_TAGS.other
+    const tags = INTENT_TAGS[sectionType] || INTENT_TAGS.other
+    // ChromaDB doesn't allow empty arrays in metadata
+    return tags.length > 0 ? tags : ['information']
 }
 
-// Parse filename for metadata
+// Parse filename for metadata (all lowercase for consistent filtering)
 export function parseFilename(s3Key: string): { company: string, year: number, documentType: string } {
     const fileName = s3Key.split('/').pop() || s3Key
     const pathParts = s3Key.split('/')
@@ -91,16 +94,16 @@ export function parseFilename(s3Key: string): { company: string, year: number, d
     const yearMatch = fileName.match(/20\d{2}/)
     const year = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear()
     
-    // Extract company from path
-    const company = pathParts.length > 1 ? pathParts[0] : 'Unknown'
+    // Extract company from path (lowercase for consistent filtering)
+    const company = pathParts.length > 1 ? pathParts[0].toLowerCase() : 'unknown'
     
-    // Detect document type
+    // Detect document type (lowercase for consistent filtering)
     let documentType = 'report'
     if (/annual/i.test(fileName)) documentType = 'annual_report'
     else if (/quarterly/i.test(fileName)) documentType = 'quarterly_report'
     
     return {
-        company: company.charAt(0).toUpperCase() + company.slice(1),
+        company,
         year,
         documentType
     }

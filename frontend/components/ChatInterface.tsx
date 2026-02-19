@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import ExampleQuestions from './ExampleQuestions';
 
 interface Message {
@@ -11,6 +12,8 @@ interface Message {
 }
 
 export default function ChatInterface() {
+  const params = useParams();
+  const locale = params.locale as string || 'en';
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -49,11 +52,16 @@ export default function ChatInterface() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: messageContent }),
+        body: JSON.stringify({ 
+          question: messageContent,
+          locale: locale 
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response from bot');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('API Error:', response.status, errorData);
+        throw new Error(errorData.error || `API Error: ${response.status}`);
       }
 
       const data = await response.json();

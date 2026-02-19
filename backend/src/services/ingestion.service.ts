@@ -1,5 +1,4 @@
 import { chunkingService } from "../core/chunking";
-import { embeddingService } from "../core/embedding";
 import { vectorDBClient } from "../db/client";
 import { s3Service } from "./s3.service";
 import { retrieverService } from "../core/retriever";
@@ -30,11 +29,8 @@ export class IngestionService {
         const documentId = request.documentId || uuidv4()
         
         try {
-            console.log(`\n=== Enhanced Ingestion ===`)
-
             // 1. Get PDF text
             const pdfData = await s3Service.getFileText(request.s3Bucket, request.s3Key)
-            console.log(`✓ Extracted ${pdfData.totalPages} pages`)
 
             if(!pdfData.text || pdfData.text.trim().length === 0){
                 throw new Error("No text found")
@@ -42,15 +38,12 @@ export class IngestionService {
 
             // 2. Parse metadata from filename
             const fileMetadata = parseFilename(request.s3Key)
-            console.log(`✓ Metadata: ${fileMetadata.company}, ${fileMetadata.year}`)
 
             // 3. Detect sections
             const sections = chunkingService.detectSections(pdfData.text)
-            console.log(`✓ Sections: ${sections.length}`)
 
             // 4. Create chunks
             const chunks = chunkingService.sectionAwareChunking(pdfData.text, sections)
-            console.log(`✓ Chunks: ${chunks.length}`)
 
             if(chunks.length === 0) throw new Error("No chunks found")
 
@@ -79,25 +72,13 @@ export class IngestionService {
                 }
             })
 
-            // 6. Generate embeddings
-            console.log(`Generating ${enrichedChunks.length} embeddings...`)
-            const embeddings: number[][] = []
-            for (let i = 0; i < enrichedChunks.length; i++) {
-                if (i % 10 === 0) console.log(`  ${i}/${enrichedChunks.length}`)
-                const embedding = await embeddingService.generateEmbedding(enrichedChunks[i].text)
-                embeddings.push(embedding)
-                await new Promise(r => setTimeout(r, 3000)) // LM Studio delay
-            }
-
-            // 7. Store
+            // 6. Store
             await vectorDBClient.addDocuments(
                 enrichedChunks.map(c => c.id),
                 enrichedChunks.map(c => c.text),
                 enrichedChunks.map(c => c.metadata),
-                embeddings
+                undefined
             )
-
-            console.log(`✓ Complete: ${enrichedChunks.length} chunks stored\n`)
 
             return {
                 documentId,
@@ -106,7 +87,6 @@ export class IngestionService {
             }
 
         } catch(error) {
-            console.error("Ingestion error:", error)
             return {
                 documentId,
                 chunksProcessed: 0,
@@ -126,16 +106,37 @@ export class IngestionService {
             return results?.documents ?? []
         }
         catch(error){
-            console.error("Query error:", error);
             throw error
         }
     }
 
-    async queryWithRAG(question: string) {
+    async queryWithRAG(question: string, locale: string = 'en') {
         try {
-            return await retrieverService.queryWithRAG(question)
+            // Translate question to English if needed
+            let englishQuestion = question
+            if (locale !== 'en') {
+                const { translateService } = require('./translate.service')
+                try {
+                    englishQuestion = await translateService.translate(question, 'en')
+                } catch (error) {
+                    // Use original question if translation fails
+                }
+            }
+            
+            const result = await retrieverService.queryWithRAG(englishQuestion)
+            
+            // Translate answer back to user's locale if needed
+            if (locale !== 'en' && result.answer) {
+                const { translateService } = require('./translate.service')
+                try {
+                    result.answer = await translateService.translate(result.answer, locale)
+                } catch (error) {
+                    // Return English answer if translation fails
+                }
+            }
+            
+            return result
         } catch (error) {
-            console.error("RAG error:", error)
             throw error
         }
     }

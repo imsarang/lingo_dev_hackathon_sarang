@@ -1,1 +1,0 @@
-// Section extraction logic
