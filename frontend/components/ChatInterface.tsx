@@ -162,12 +162,10 @@ export default function ChatInterface() {
           // Handle different event types
           switch (eventType) {
             case 'status':
-              // Update status (optional - you can show this in UI)
               console.log('Status:', data.message);
               break;
 
             case 'token':
-              // Update bot message with accumulated text
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === botMessageId
@@ -178,14 +176,12 @@ export default function ChatInterface() {
               break;
 
             case 'session':
-              // Store session ID
               if (data.sessionId && data.sessionId !== sessionId) {
                 setSessionId(data.sessionId);
               }
               break;
 
             case 'complete':
-              // Final update with complete answer
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === botMessageId
@@ -193,15 +189,13 @@ export default function ChatInterface() {
                     : msg
                 )
               );
-              
-              // Store session ID if provided
               if (data.sessionId && data.sessionId !== sessionId) {
                 setSessionId(data.sessionId);
               }
+              setIsLoading(false);
               break;
 
             case 'error':
-              // Show error - replace existing message content
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === botMessageId
@@ -209,7 +203,6 @@ export default function ChatInterface() {
                     : msg
                 )
               );
-              // Stop loading immediately on error
               setIsLoading(false);
               break;
           }

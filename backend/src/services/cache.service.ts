@@ -14,7 +14,7 @@ class CacheService{
     private client: RedisClientType|null = null;
     private isConnected: boolean = false
     private readonly CACHE_TTL:number = 3600
-    private readonly SIMILARITY_THRESHOLD: number = 0.95;
+    private readonly SIMILARITY_THRESHOLD: number = 0.85; // Lowered from 0.95 for better cache hits
 
     constructor(){
         this._initRedis()
@@ -78,6 +78,9 @@ class CacheService{
             const keys = await this.client.keys(`cache:${locale}:*`)
             let bestMatch: CachedResponse | null = null
             let bestSimilarity: number = 0
+            const allSimilarities: Array<{question: string, similarity: number}> = []
+
+            console.log(`[CACHE SERVICE] Checking ${keys.length} cached questions for similarity...`)
 
             for(const key of keys){
                 const cachedData = await this.client.get(key)
@@ -85,6 +88,8 @@ class CacheService{
 
                 const cached: CachedResponse = JSON.parse(cachedData)
                 const similarity = this.cosineSimilarity(questionEmbedding, cached.embedding)
+                
+                allSimilarities.push({ question: cached.question, similarity })
 
                 if(similarity > bestSimilarity && similarity >= this.SIMILARITY_THRESHOLD){
                     bestSimilarity = similarity
@@ -92,8 +97,20 @@ class CacheService{
                 }
             }
 
+            // Log top similarities for debugging
+            if(allSimilarities.length > 0){
+                const sorted = allSimilarities.sort((a, b) => b.similarity - a.similarity)
+                const top3 = sorted.slice(0, 3)
+                console.log(`[CACHE SERVICE] Top similarities:`)
+                top3.forEach((item, idx) => {
+                    console.log(`  ${idx + 1}. "${item.question.substring(0, 60)}..." - ${(item.similarity * 100).toFixed(2)}%`)
+                })
+            }
+
             if(bestMatch){
-                console.log(`[CACHE SERVICE] Cache HIT! Similarity: ${(bestSimilarity * 100).toFixed(2)}%`);
+                console.log(`[CACHE SERVICE] ✅ Cache HIT! Similarity: ${(bestSimilarity * 100).toFixed(2)}% (threshold: ${(this.SIMILARITY_THRESHOLD * 100).toFixed(0)}%)`);
+            } else {
+                console.log(`[CACHE SERVICE] ❌ Cache MISS - Best similarity: ${bestSimilarity > 0 ? (bestSimilarity * 100).toFixed(2) + '%' : 'N/A'} (threshold: ${(this.SIMILARITY_THRESHOLD * 100).toFixed(0)}%)`)
             }
 
             return bestMatch

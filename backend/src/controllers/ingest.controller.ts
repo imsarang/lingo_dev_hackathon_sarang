@@ -198,6 +198,8 @@ export class IngestController {
             }
 
             // Stream the RAG process
+            // Note: ingestionService.queryWithRAGStream already sends the 'complete' event
+            // with the final answer, so we don't need to send another one here
             await ingestionService.queryWithRAGStream(
                 question,
                 sessionId,
@@ -205,10 +207,7 @@ export class IngestController {
                 sendEvent // Pass callback to send events
             )
 
-            // Only send completion if no error occurred
-            if (!errorSent) {
-                sendEvent('complete', { message: 'Stream completed' })
-            }
+            // Close the stream - ingestionService already sent the complete event
             res.end()
             
         } catch(error){

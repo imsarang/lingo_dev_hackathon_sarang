@@ -314,10 +314,11 @@ export class IngestionService {
 
             // Check if result contains an error message
             if (result.answer && (
-                result.answer.includes('error') || 
-                result.answer.includes('Error') ||
-                result.answer.includes('GPU error') ||
-                result.answer.toLowerCase().includes('unavailable')
+                result.answer.toLowerCase().includes('error') || 
+                result.answer.toLowerCase().includes('failed') ||
+                result.answer.toLowerCase().includes('unavailable') ||
+                result.answer.toLowerCase().includes('streaming failed') ||
+                result.answer.toLowerCase().includes('gpu error')
             )) {
                 // If answer looks like an error, send it as error event and return
                 sendEvent('error', { message: result.answer })
