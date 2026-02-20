@@ -19,16 +19,16 @@ export default function LanguageSwitcher() {
 
   // Check if translation is in progress
   useEffect(() => {
-    const checkTranslation = () => {
+    const checkTranslationStatus = () => {
       const status = localStorage.getItem('isTranslating');
       setIsTranslating(status === 'true');
     };
 
     // Check immediately
-    checkTranslation();
+    checkTranslationStatus();
 
     // Check every 200ms for updates
-    const interval = setInterval(checkTranslation, 200);
+    const interval = setInterval(checkTranslationStatus, 200);
 
     return () => clearInterval(interval);
   }, []);
@@ -53,21 +53,26 @@ export default function LanguageSwitcher() {
   const currentLocale = pathname.split('/')[1] as Locale || 'en';
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2 flex-wrap">
       {locales.map((locale) => (
         <button
           key={locale}
           onClick={() => switchLocale(locale)}
           disabled={isTranslating}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
+          className={`px-3 py-1.5 rounded text-sm transition-colors relative ${
             isTranslating
               ? 'opacity-50 cursor-not-allowed'
               : currentLocale === locale
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-          }`}
+              ? 'bg-white text-blue-600 font-medium shadow-md'
+              : 'bg-white/20 text-white hover:bg-white/30'
+          }
+          ${isTranslating ? 'opacity-50 cursor-not-allowed': ''}    
+          `}
         >
           {localeNames[locale]}
+          {isTranslating && currentLocale === locale && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+          )}
         </button>
       ))}
     </div>

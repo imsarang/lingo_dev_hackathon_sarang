@@ -36,6 +36,11 @@
       "question2": "Können Sie die wichtigsten Erkenntnisse zusammenfassen?",
       "question3": "Welche Empfehlungen werden erwähnt?",
       "question4": "Vergleichen Sie die verschiedenen diskutierten Ansätze"
+    },
+    "translation": {
+      "inProgress": "Übersetzung läuft...",
+      "complete": "Übersetzung abgeschlossen",
+      "fromTo": "Übersetzung von {source} nach {target}"
     }
   }
 }

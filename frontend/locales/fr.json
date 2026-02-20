@@ -36,6 +36,11 @@
       "question2": "Pouvez-vous résumer les conclusions clés?",
       "question3": "Quelles sont les recommandations mentionnées?",
       "question4": "Comparez les différentes approches discutées"
+    },
+    "translation": {
+      "inProgress": "Traduction en cours...",
+      "complete": "Traduction terminée",
+      "fromTo": "Traduction de {source} vers {target}"
     }
   }
 }

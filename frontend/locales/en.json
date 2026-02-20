@@ -36,6 +36,11 @@
       "question2": "Can you summarize the key findings?",
       "question3": "What are the recommendations mentioned?",
       "question4": "Compare the different approaches discussed"
+    },
+    "translation": {
+      "inProgress": "Translating...",
+      "complete": "Translation complete",
+      "fromTo": "Translating from {source} to {target}"
     }
   }
 }

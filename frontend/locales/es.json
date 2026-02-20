@@ -36,6 +36,11 @@
       "question2": "¿Puedes resumir los hallazgos clave?",
       "question3": "¿Cuáles son las recomendaciones mencionadas?",
       "question4": "Compara los diferentes enfoques discutidos"
+    },
+    "translation": {
+      "inProgress": "Traduciendo...",
+      "complete": "Traducción completa",
+      "fromTo": "Traduciendo de {source} a {target}"
     }
   }
 }

@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import ExampleQuestions from './ExampleQuestions';
+import LanguageSwitcher from './LanguageSwitcher';
+import { getLanguageName } from '@/utils/languageNames';
+
 
 interface Message {
   id: string;
@@ -17,6 +20,7 @@ const SESSION_KEY = 'chat_session_id';
 
 export default function ChatInterface() {
   const params = useParams();
+  const router = useRouter();
   const locale = params.locale as string || 'en';
   const t = useTranslations('chat');
   
@@ -26,8 +30,56 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // translation states
+  const [isTranslating, setIsTranslating] = useState<boolean>(false)
+  const [translationSource, setTranslationSource] = useState<string | null>(null)
+  const [translationTarget, setTranslationTarget] = useState<string | null>(null)
+  const [translationProgress, setTranslationProgress] = useState(0)
+
+  // voice states
+  const [listening, setListening] = useState<boolean>(false)
+  const [transcription, setTranscription] = useState<string>("")
+  const recognitionRef = useRef<any>(null)
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = locale === 'en' ? 'en-US' : locale;
+        recognitionRef.current.onstart = () => setListening(true);
+        recognitionRef.current.onresult = (e: any) => {
+          const text = e.results[0][0].transcript;
+          setTranscription(text);
+          setInput(text); // Auto-fill input field
+        };
+        recognitionRef.current.onerror = () => setListening(false);
+        recognitionRef.current.onend = () => setListening(false);
+      }
+    }
+  }, [locale]);
+
   const fetchTranslations = async (locale: string) => {
-    // Mark translation as in progress
+    // Get current locale from URL params (before switching)
+    const currentLocale = params.locale as string || 'en';
+    
+    // Use current locale as source, target locale as destination
+    const sourceLocale = currentLocale;
+    const targetLocale = locale;
+    
+    // Only translate if source and target are different
+    if (sourceLocale === targetLocale) {
+      return; // No translation needed
+    }
+    
+    setIsTranslating(true)
+    setTranslationSource(sourceLocale)
+    setTranslationTarget(targetLocale)
+    setTranslationProgress(5) // Start with small progress to show bar
+    localStorage.setItem('previousLocale', locale)
     localStorage.setItem('isTranslating', 'true');
 
     try {
@@ -45,7 +97,7 @@ export default function ChatInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: messages, 
-          targetLocale: locale 
+          targetLocale: targetLocale 
         }),
       });
 
@@ -61,6 +113,7 @@ export default function ChatInterface() {
 
       const decoder = new TextDecoder();
       let textBuffer = '';
+      const totalMessages = messages.length;
       // Start with current messages as base
       const allTranslatedMessages: Message[] = messages.map((msg: any) => ({
         ...msg,
@@ -114,11 +167,17 @@ export default function ChatInterface() {
               content: eventData.message.content || originalMsg?.content || '',
               timestamp: new Date(eventData.message.timestamp || originalMsg?.timestamp || new Date())
             };
+            // Update progress
+            if (messages.length > 0) {
+              const progress = Math.round(((index + 1) / messages.length) * 100);
+              setTranslationProgress(progress);
+            }
             // Update UI with final translation
             setMessages([...allTranslatedMessages]);
           } 
           else if (eventType === 'complete') {
             // All messages translated - save everything
+            setTranslationProgress(100);
             const finalMessages = eventData.messages.map((msg: any, idx: number) => {
               const originalMsg = messages[idx] || allTranslatedMessages[idx];
               return {
@@ -140,9 +199,30 @@ export default function ChatInterface() {
       console.error('Error translating messages:', err);
     } finally {
       // Mark translation as complete
+      setIsTranslating(false)
+      setTranslationSource(null)
+      setTranslationTarget(null)
+      setTranslationProgress(0)
       localStorage.setItem('isTranslating', 'false');
     }
   }
+
+
+  const handleVoiceStart = () => {
+    if (recognitionRef.current) {
+      setTranscription('');
+      recognitionRef.current.start();
+    }
+  };
+
+  const handleVoiceStop = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  };
+
+  const browserSupportsSpeechRecognition = typeof window !== 'undefined' && 
+    ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   // Load messages from localStorage
   useEffect(() => {
@@ -293,19 +373,103 @@ export default function ChatInterface() {
     sendMessage(input);
   };
 
+  
+
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-white dark:bg-zinc-900">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg">
-        <div className="flex items-center justify-between">
+    <div className="flex h-screen w-full bg-white dark:bg-zinc-900">
+      {/* Header - 1/3 width */}
+      <div className="w-1/3 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg flex flex-col">
+        <div className="flex flex-col h-full">
+          {/* Home Button and Locale Selector */}
+          <div className="mb-6 space-y-4">
+            <button
+              onClick={() => router.push(`/${locale}`)}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium text-white"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Home
+            </button>
+            <LanguageSwitcher />
+          </div>
+
+          {/* Voice Input Section */}
+          <div className="mb-6">
+            <div className="bg-white/10 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-white">Voice Input</h3>
+                {!browserSupportsSpeechRecognition && (
+                  <span className="text-xs text-yellow-300">Not supported</span>
+                )}
+              </div>
+              
+              {browserSupportsSpeechRecognition && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={listening ? handleVoiceStop : handleVoiceStart}
+                      disabled={isLoading}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all font-medium ${
+                        listening
+                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                          : 'bg-white/20 hover:bg-white/30 text-white'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {listening ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Listening...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                          <span>Start Voice</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {listening && (
+                    <div className="flex items-center gap-2 text-blue-100 text-xs">
+                      <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+                      <span>Speak now...</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          
           <div>
             <h1 className="text-2xl font-bold">{t('header.title')}</h1>
+            {isTranslating && translationSource && translationTarget && translationSource !== translationTarget && (
+              <div className="mt-2">
+                <div className="flex items-center gap-2 text-blue-100 text-xs mb-1">
+                  <div className="w-3 h-3 border-2 border-blue-100 border-t-transparent rounded-full animate-spin" />
+                  <span>
+                    {t('translation.fromTo', {
+                      source: getLanguageName(translationSource),
+                      target: getLanguageName(translationTarget)
+                    })}
+                  </span>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="bg-white h-1.5 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.max(0, Math.min(100, translationProgress))}%` }}
+                  />
+                </div>
+              </div>
+            )}
             <p className="text-blue-100 text-sm mt-1">{t('header.subtitle')}</p>
           </div>
           {messages.length > 0 && (
             <button
               onClick={clearChat}
-              className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium"
+              className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium self-start"
             >
               {t('header.clearButton')}
             </button>
@@ -313,8 +477,9 @@ export default function ChatInterface() {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-50 dark:bg-zinc-950">
+      {/* Messages - 2/3 width */}
+      <div className="w-2/3 flex flex-col bg-zinc-50 dark:bg-zinc-950">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-full p-6 mb-4">
@@ -364,36 +529,37 @@ export default function ChatInterface() {
             <div ref={messagesEndRef} />
           </>
         )}
-      </div>
+        </div>
 
-      {/* Input */}
-      <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-lg">
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t('input.placeholder')}
-            disabled={isLoading}
-            className="flex-1 px-4 py-3 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200 placeholder-zinc-500 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-md"
-          >
-            {isLoading ? (
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            )}
-          </button>
-        </form>
+        {/* Input */}
+        <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-lg">
+          <form onSubmit={handleSubmit} className="flex gap-3">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t('input.placeholder')}
+              disabled={isLoading}
+              className="flex-1 px-4 py-3 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200 placeholder-zinc-500 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-md"
+            >
+              {isLoading ? (
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
