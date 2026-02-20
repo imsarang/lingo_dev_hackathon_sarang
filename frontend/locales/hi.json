@@ -13,7 +13,8 @@
     "header": {
       "title": "AI सहायक",
       "subtitle": "अपने दस्तावेज़ों के बारे में कुछ भी पूछें",
-      "clearButton": "चैट साफ़ करें"
+      "clearButton": "चैट साफ़ करें",
+      "savePdf": "PDF के रूप में सहेजें"
     },
     "emptyState": {
       "title": "बातचीत शुरू करें",

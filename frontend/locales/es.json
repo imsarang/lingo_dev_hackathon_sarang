@@ -13,7 +13,8 @@
     "header": {
       "title": "Asistente de IA",
       "subtitle": "Pregúntame lo que quieras sobre tus documentos",
-      "clearButton": "Limpiar Chat"
+      "clearButton": "Limpiar Chat",
+      "savePdf": "Guardar como PDF"
     },
     "emptyState": {
       "title": "Inicia una conversación",

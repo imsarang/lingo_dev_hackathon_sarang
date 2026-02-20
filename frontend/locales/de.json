@@ -13,7 +13,8 @@
     "header": {
       "title": "KI-Assistent",
       "subtitle": "Fragen Sie mich alles zu Ihren Dokumenten",
-      "clearButton": "Chat löschen"
+      "clearButton": "Chat löschen",
+      "savePdf": "Als PDF speichern"
     },
     "emptyState": {
       "title": "Gespräch beginnen",

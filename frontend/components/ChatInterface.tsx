@@ -39,13 +39,19 @@ export default function ChatInterface() {
   // voice states
   const [listening, setListening] = useState<boolean>(false)
   const [transcription, setTranscription] = useState<string>("")
+  const [browserSupportsSpeechRecognition, setBrowserSupportsSpeechRecognition] = useState<boolean>(false)
   const recognitionRef = useRef<any>(null)
+
+  const workerRef = useRef<Worker | null>(null)
 
   // Initialize Speech Recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
+      const isSupported = !!SpeechRecognition;
+      setBrowserSupportsSpeechRecognition(isSupported);
+      
+      if (isSupported) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
@@ -62,41 +68,29 @@ export default function ChatInterface() {
     }
   }, [locale]);
 
-  const fetchTranslations = async (locale: string) => {
-    // Get current locale from URL params (before switching)
-    const currentLocale = params.locale as string || 'en';
+  const fetchTranslations = async (targetLocale: string) => {
+    // Get messages from localStorage (always fresh)
+    const messagesStr = localStorage.getItem(STORAGE_KEY);
+    if (!messagesStr) return;
     
-    // Use current locale as source, target locale as destination
-    const sourceLocale = currentLocale;
-    const targetLocale = locale;
-    
-    // Only translate if source and target are different
-    if (sourceLocale === targetLocale) {
-      return; // No translation needed
-    }
+    const messagesToTranslate = JSON.parse(messagesStr);
+    if (!Array.isArray(messagesToTranslate) || messagesToTranslate.length === 0) return;
     
     setIsTranslating(true)
-    setTranslationSource(sourceLocale)
+    setTranslationSource(localStorage.getItem('currentLocale') || 'en')
     setTranslationTarget(targetLocale)
-    setTranslationProgress(5) // Start with small progress to show bar
-    localStorage.setItem('previousLocale', locale)
+    setTranslationProgress(10) // Start with visible progress
+    localStorage.setItem('currentLocale', targetLocale)
     localStorage.setItem('isTranslating', 'true');
 
     try {
-      // Step 2: Get messages from localStorage
-      const messagesStr = localStorage.getItem(STORAGE_KEY);
-      if (!messagesStr) return;
-      
-      const messages = JSON.parse(messagesStr);
-      if (!Array.isArray(messages) || messages.length === 0) return;
-      
-      // Step 3: Call translation API
+      // Call translation API
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
       const response = await fetch(`${apiUrl}/api/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: messages, 
+          messages: messagesToTranslate, 
           targetLocale: targetLocale 
         }),
       });
@@ -113,9 +107,8 @@ export default function ChatInterface() {
 
       const decoder = new TextDecoder();
       let textBuffer = '';
-      const totalMessages = messages.length;
       // Start with current messages as base
-      const allTranslatedMessages: Message[] = messages.map((msg: any) => ({
+      const allTranslatedMessages: Message[] = messagesToTranslate.map((msg: any) => ({
         ...msg,
         timestamp: new Date(msg.timestamp)
       }));
@@ -160,7 +153,7 @@ export default function ChatInterface() {
           else if (eventType === 'message') {
             // A single message was fully translated - final update
             const index = eventData.index;
-            const originalMsg = allTranslatedMessages[index] || messages[index];
+            const originalMsg = allTranslatedMessages[index];
             allTranslatedMessages[index] = {
               ...originalMsg,
               ...eventData.message,
@@ -168,25 +161,18 @@ export default function ChatInterface() {
               timestamp: new Date(eventData.message.timestamp || originalMsg?.timestamp || new Date())
             };
             // Update progress
-            if (messages.length > 0) {
-              const progress = Math.round(((index + 1) / messages.length) * 100);
-              setTranslationProgress(progress);
-            }
+            const progress = Math.round(((index + 1) / messagesToTranslate.length) * 100);
+            setTranslationProgress(progress);
             // Update UI with final translation
             setMessages([...allTranslatedMessages]);
           } 
           else if (eventType === 'complete') {
             // All messages translated - save everything
             setTranslationProgress(100);
-            const finalMessages = eventData.messages.map((msg: any, idx: number) => {
-              const originalMsg = messages[idx] || allTranslatedMessages[idx];
-              return {
-                ...originalMsg,
-                ...msg,
-                content: msg.content || originalMsg?.content || '',
-                timestamp: new Date(msg.timestamp || originalMsg?.timestamp || new Date())
-              };
-            });
+            const finalMessages = eventData.messages.map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }));
             setMessages(finalMessages);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(finalMessages));
           } 
@@ -221,9 +207,6 @@ export default function ChatInterface() {
     }
   };
 
-  const browserSupportsSpeechRecognition = typeof window !== 'undefined' && 
-    ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-
   // Load messages from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -244,8 +227,19 @@ export default function ChatInterface() {
     if (savedSession) {
       setSessionId(savedSession);
     }
-    fetchTranslations(locale)
-  }, [locale]); // Reload when locale changes
+  }, []); // Only run once on mount
+
+  // Translate messages when locale changes
+  useEffect(() => {
+    const messagesStr = localStorage.getItem(STORAGE_KEY);
+    if (messagesStr) {
+      const parsed = JSON.parse(messagesStr);
+      if (parsed.length > 0) {
+        fetchTranslations(locale);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]); // Translate when locale changes
 
   // Save to localStorage
   useEffect(() => {
@@ -373,6 +367,33 @@ export default function ChatInterface() {
     sendMessage(input);
   };
 
+  const savePdf = () => {
+    if (!workerRef.current) {
+      workerRef.current = new Worker(
+        new URL("../workers/pdfWorker.ts", import.meta.url),
+        { type: 'module' }
+      );
+
+      workerRef.current.onmessage = (event: MessageEvent) => {
+        const { success, pdfBlob, error } = event.data;
+
+        if (success && pdfBlob) {
+          const url = URL.createObjectURL(pdfBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "conversation.pdf";
+          a.click();
+          URL.revokeObjectURL(url);
+        } else {
+          console.error("Error generating PDF:", error);
+        }
+      };
+    }
+
+    if (workerRef.current) {
+      workerRef.current.postMessage({ messages });
+    }
+  }
   
 
   return (
@@ -445,15 +466,18 @@ export default function ChatInterface() {
           
           <div>
             <h1 className="text-2xl font-bold">{t('header.title')}</h1>
-            {isTranslating && translationSource && translationTarget && translationSource !== translationTarget && (
+            {isTranslating && (
               <div className="mt-2">
                 <div className="flex items-center gap-2 text-blue-100 text-xs mb-1">
                   <div className="w-3 h-3 border-2 border-blue-100 border-t-transparent rounded-full animate-spin" />
                   <span>
-                    {t('translation.fromTo', {
-                      source: getLanguageName(translationSource),
-                      target: getLanguageName(translationTarget)
-                    })}
+                    {translationSource && translationTarget && translationSource !== translationTarget
+                      ? t('translation.fromTo', {
+                          source: getLanguageName(translationSource),
+                          target: getLanguageName(translationTarget)
+                        })
+                      : t('translation.inProgress')
+                    }
                   </span>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
@@ -467,12 +491,24 @@ export default function ChatInterface() {
             <p className="text-blue-100 text-sm mt-1">{t('header.subtitle')}</p>
           </div>
           {messages.length > 0 && (
-            <button
-              onClick={clearChat}
-              className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium self-start"
-            >
-              {t('header.clearButton')}
-            </button>
+            <div className='flex flex-col gap-2 mt-4'>
+              <button
+                onClick={savePdf}
+                disabled={isTranslating}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium self-start flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {t('header.savePdf')}
+              </button>
+              <button
+                onClick={clearChat}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm font-medium self-start"
+              >
+                {t('header.clearButton')}
+              </button>
+            </div>
           )}
         </div>
       </div>
