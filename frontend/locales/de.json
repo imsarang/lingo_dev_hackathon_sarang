@@ -8,5 +8,34 @@
     "center": "Zentrum",
     "deployNow": "Jetzt bereitstellen",
     "documentation": "Dokumentation"
+  },
+  "chat": {
+    "header": {
+      "title": "KI-Assistent",
+      "subtitle": "Fragen Sie mich alles zu Ihren Dokumenten",
+      "clearButton": "Chat löschen"
+    },
+    "emptyState": {
+      "title": "Gespräch beginnen",
+      "description": "Stellen Sie Fragen zu Ihren Dokumenten und ich werde detaillierte Antworten basierend auf dem Inhalt liefern.",
+      "tryAsking": "Versuchen Sie zu fragen:"
+    },
+    "input": {
+      "placeholder": "Geben Sie Ihre Nachricht ein...",
+      "sendButton": "Senden"
+    },
+    "errors": {
+      "noResponse": "Entschuldigung, ich konnte keine Antwort generieren.",
+      "general": "Entschuldigung, es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut."
+    },
+    "loading": {
+      "thinking": "Denke..."
+    },
+    "examples": {
+      "question1": "Welche Hauptthemen werden in den Dokumenten behandelt?",
+      "question2": "Können Sie die wichtigsten Erkenntnisse zusammenfassen?",
+      "question3": "Welche Empfehlungen werden erwähnt?",
+      "question4": "Vergleichen Sie die verschiedenen diskutierten Ansätze"
+    }
   }
 }

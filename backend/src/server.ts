@@ -6,6 +6,7 @@ import express from 'express'
 import cors from 'cors'
 import ingestRoutes from './routes/ingest.routes'
 import chromadbRoutes from './routes/chromadb.routes'
+import translateRoutes from './routes/translate.route'
 
 const app = express()
 
@@ -18,5 +19,6 @@ app.use(cors({
 app.use(express.json())
 app.use('/api/ingest', ingestRoutes)
 app.use('/api/chromadb', chromadbRoutes)
+app.use('/api/translate', translateRoutes)
 
 app.listen(3000)

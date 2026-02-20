@@ -195,6 +195,55 @@ class CacheService{
             this.isConnected = false;
         }
     }
+
+    // Translation caching methods
+    async getCachedTranslation(text: string, locale: string): Promise<string | null> {
+        if (!this.client || !this.isConnected) return null;
+
+        try {
+            const textHash = Buffer.from(text).toString('base64').substring(0, 20);
+            const key = `cache:${locale}:${textHash}`;
+            
+            const cached = await this.client.get(key);
+            if (cached) {
+                const data = JSON.parse(cached);
+                // Check if it's a translation (has translatedText) vs RAG response (has answer)
+                if (data.translatedText) {
+                    console.log(`[CACHE SERVICE] ✅ Translation cache HIT for locale: ${locale}`);
+                    return data.translatedText;
+                }
+                // If it's a RAG cache entry (has answer), ignore it
+            }
+            
+            return null;
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error getting cached translation:', err);
+            return null;
+        }
+    }
+
+    async cacheTranslation(text: string, translatedText: string, locale: string): Promise<void> {
+        if (!this.client || !this.isConnected) return;
+
+        try {
+            const textHash = Buffer.from(text).toString('base64').substring(0, 20);
+            const key = `cache:${locale}:${textHash}`;
+            
+            const data = {
+                originalText: text,
+                translatedText: translatedText,
+                locale: locale,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Cache for 24 hours (translations don't change)
+            // Note: Uses same key pattern as RAG cache, but different data structure
+            await this.client.setEx(key, 86400, JSON.stringify(data));
+            console.log(`[CACHE SERVICE] 💾 Cached translation for locale: ${locale}`);
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error caching translation:', err);
+        }
+    }
 }
 
 export const cacheService = new CacheService()

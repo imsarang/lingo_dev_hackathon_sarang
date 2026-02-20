@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Redis for session storage and caching
+  redis:
+    image: redis:7-alpine
+    container_name: lingo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lingo-network
+
+  # ChromaDB for vector storage
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: lingo-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lingo-network
+
+  # Backend application
+  backend:
+    image: ${DOCKERHUB_USERNAME}/lingo-dev-backend:latest
+    container_name: lingo-backend
+    ports:
+      - "3000:3000"
+    environment:
+      # AWS Configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      
+      # HuggingFace Configuration
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - HUGGINGFACE_MODEL=${HUGGINGFACE_MODEL:-meta-llama/Meta-Llama-3-8B-Instruct}
+      
+      # Redis Configuration (using service name as hostname)
+      - REDIS_URL=redis://redis:6379
+      
+      # ChromaDB Configuration (using service name as hostname)
+      - CHROMA_URL=http://chromadb:8000
+      
+      # Server Configuration
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - lingo-network
+
+volumes:
+  redis_data:
+  chroma_data:
+
+networks:
+  lingo-network:
+    driver: bridge

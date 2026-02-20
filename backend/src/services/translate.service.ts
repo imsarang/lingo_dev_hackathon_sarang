@@ -1,72 +1,231 @@
-interface LibreTranslateResponse {
-    translatedText: string
-    detectedLanguage?: {
-        confidence: number
-        language: string
-    }
+import { InferenceClient } from "@huggingface/inference"
+import { cacheService } from "./cache.service"
+
+// Translation model mapping for different language pairs
+// Note: These models support bidirectional translation
+const TRANSLATION_MODELS: Record<string, string> = {
+    'es': 'Helsinki-NLP/opus-mt-en-es',  // English ↔ Spanish
+    'fr': 'Helsinki-NLP/opus-mt-en-fr',  // English ↔ French
+    'de': 'Helsinki-NLP/opus-mt-en-de',  // English ↔ German
+    'hi': 'Helsinki-NLP/opus-mt-en-hi', // English ↔ Hindi
+    'en': 'Helsinki-NLP/opus-mt-es-en',  // Spanish to English (can be used for reverse)
 }
 
 class TranslateService {
-    private apiUrl: string = 'https://libretranslate.com/translate'
+    private client: InferenceClient | null = null
+
+    constructor() {
+        const apiKey = process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN
+        if (apiKey) {
+            this.client = new InferenceClient(apiKey)
+        } else {
+            console.warn('[TRANSLATE SERVICE] ⚠️ HUGGINGFACE_API_KEY not set. Translation will fallback to original text.')
+        }
+    }
 
     /**
-     * Translate text using LibreTranslate (free, no API key required)
-     * Supported locales: en, es, fr, de, hi, and many more
+     * Translate text using Hugging Face with streaming
+     * Uses text generation with translation prompt for true streaming
      */
-    async translate(text: string, targetLocale: string): Promise<string> {
-        console.log(`\n[TRANSLATE SERVICE] Translation request`)
-        console.log(`[TRANSLATE SERVICE] Target locale: ${targetLocale}`)
-        console.log(`[TRANSLATE SERVICE] Text length: ${text.length} chars`)
-        console.log(`[TRANSLATE SERVICE] Text preview: ${text.substring(0, 80)}${text.length > 80 ? '...' : ''}`)
-        
-        try {
-            console.log(`[TRANSLATE SERVICE] 📡 Calling LibreTranslate API...`)
-            const startTime = Date.now()
+    async translateStream(
+        text: string, 
+        targetLocale: string, 
+        onToken: (token: string, accumulated: string) => void
+    ): Promise<string> {
+        // If no API key, return original
+        if (!this.client || !targetLocale) {
+            return text;
+        }
 
-            const response = await fetch(this.apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    q: text,
-                    source: 'auto',  // Auto-detect source language
-                    target: targetLocale,
-                    format: 'text'
-                })
-            })
-
-            const duration = Date.now() - startTime
-            console.log(`[TRANSLATE SERVICE] API response received in ${duration}ms, status: ${response.status}`)
-
-            if (!response.ok) {
-                const errorText = await response.text()
-                console.log(`[TRANSLATE SERVICE] ⚠️ API error: ${response.status} - ${errorText}`)
-                console.log('[TRANSLATE SERVICE] Returning original text as fallback')
-                return text // Fallback: return original text
+        // Check cache first
+        const cached = await cacheService.getCachedTranslation(text, targetLocale);
+        if (cached) {
+            // Stream cached translation word by word for smooth UX
+            const words = cached.split(' ');
+            let accumulated = '';
+            for (const word of words) {
+                accumulated += (accumulated ? ' ' : '') + word;
+                onToken(word + ' ', accumulated);
+                await new Promise(resolve => setTimeout(resolve, 20));
             }
+            return cached;
+        }
 
-            const data = await response.json() as LibreTranslateResponse
-            
-            if (!data || !data.translatedText) {
-                console.log('[TRANSLATE SERVICE] ⚠️ No translation in response, returning original text')
-                return text
-            }
+        const languageNames: Record<string, string> = {
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'hi': 'Hindi',
+            'en': 'English'
+        }
 
-            if (data.detectedLanguage) {
-                console.log(`[TRANSLATE SERVICE] Detected source language: ${data.detectedLanguage.language} (confidence: ${data.detectedLanguage.confidence})`)
-            }
-            
-            console.log(`[TRANSLATE SERVICE] ✅ Translation successful`)
-            console.log(`[TRANSLATE SERVICE] Translated text preview: ${data.translatedText.substring(0, 80)}${data.translatedText.length > 80 ? '...' : ''}\n`)
-            return data.translatedText
-
-        } catch (err) {
-            console.error('[TRANSLATE SERVICE] ❌ Translation error:', err)
-            console.log('[TRANSLATE SERVICE] Returning original text as fallback\n')
-            // Fallback: return original text if translation fails
+        const targetLanguage = languageNames[targetLocale]
+        if (!targetLanguage) {
             return text
         }
+
+        try {
+            // Use chat completion with translation prompt for streaming
+            // For English, translate FROM detected language TO English
+            // For other languages, translate FROM English TO target language
+            const prompt = targetLocale === 'en'
+                ? `Translate the following text to English. Only output the translation, nothing else.\n\nText: ${text}\nEnglish:`
+                : `Translate the following English text to ${targetLanguage}. Only output the translation, nothing else.\n\nEnglish: ${text}\n${targetLanguage}:`
+
+            const stream = this.client.chatCompletionStream({
+                model: 'meta-llama/Meta-Llama-3-8B-Instruct',
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                parameters: {
+                    max_tokens: 512,
+                    temperature: 0.3
+                }
+            })
+
+            let accumulated = ''
+            for await (const chunk of stream) {
+                // Handle different response formats
+                let token = ''
+                
+                // Chat completion format: { choices: [{ delta: { content: "..." } }] }
+                if (chunk.choices && chunk.choices.length > 0) {
+                    const delta = chunk.choices[0].delta
+                    if (delta && delta.content && typeof delta.content === 'string') {
+                        token = delta.content
+                    }
+                } else if (chunk.token && typeof chunk.token === 'object' && 'text' in chunk.token) {
+                    // Fallback to textGeneration format
+                    token = String((chunk.token as any).text)
+                } else if (chunk.generated_text && typeof chunk.generated_text === 'string') {
+                    // Sometimes HF sends full generated text
+                    const newText = chunk.generated_text
+                    if (newText.length > accumulated.length) {
+                        token = newText.substring(accumulated.length)
+                    }
+                }
+
+                if (token && token.trim().length > 0) {
+                    accumulated += token
+                    onToken(token, accumulated.trim())
+                }
+            }
+
+            const translatedText = accumulated.trim() || text;
+            
+            // Cache the translation
+            await cacheService.cacheTranslation(text, translatedText, targetLocale);
+            
+            return translatedText;
+
+        } catch (err) {
+            console.error('[TRANSLATE SERVICE] Streaming error:', err)
+            // Fallback to non-streaming translation
+            return await this.translate(text, targetLocale)
+        }
+    }
+
+    /**
+     * Translate text using Hugging Face Translation Models (non-streaming fallback)
+     */
+    async translate(text: string, targetLocale: string): Promise<string> {
+        // If no API key, return original
+        if (!this.client || !targetLocale) {
+            return text
+        }
+
+        // Check cache first
+        const cached = await cacheService.getCachedTranslation(text, targetLocale);
+        if (cached) {
+            return cached;
+        }
+
+        const model = TRANSLATION_MODELS[targetLocale]
+        if (!model) {
+            return text
+        }
+        
+        try {
+            const response = await this.client.translation({
+                model: model,
+                inputs: text
+            })
+
+            const translatedText = typeof response === 'string' 
+                ? response 
+                : (response as any)?.translation_text || (response as any)?.text || ''
+
+            const finalText = translatedText || text;
+            
+            // Cache the translation
+            await cacheService.cacheTranslation(text, finalText, targetLocale);
+            
+            return finalText;
+
+        } catch (err) {
+            console.error('[TRANSLATE SERVICE] Translation error:', err)
+            return text
+        }
+    }
+
+    async translateMessages(messages: any[], targetLocale: string, sendEvent: (type: string, data: any) => void): Promise<any[]> {
+        const translatedMessages: any[] = [];
+
+        // Translate each message one by one with streaming
+        for (let i = 0; i < messages.length; i++) {
+            const message = messages[i];
+            
+            try {
+                let translatedContent = '';
+                
+                // Use streaming translation
+                const result = await this.translateStream(
+                    message.content, 
+                    targetLocale,
+                    (token, accumulated) => {
+                        // Stream each token as it arrives
+                        translatedContent = accumulated;
+                        sendEvent('token', {
+                            index: i,
+                            token: token,
+                            accumulated: accumulated
+                        });
+                    }
+                );
+
+                // Ensure content is set (fallback to result or original)
+                const finalContent = translatedContent || result || message.content || '';
+                
+                // Preserve all original message fields
+                const translatedMessage = { 
+                    ...message, 
+                    content: finalContent
+                };
+                translatedMessages.push(translatedMessage);
+                
+                // Send complete translated message with all fields
+                sendEvent('message', {
+                    index: i,
+                    message: translatedMessage
+                });
+            } catch (err) {
+                console.error(`[TRANSLATE SERVICE] Error translating message ${i + 1}:`, err);
+                // Use original message if translation fails
+                translatedMessages.push(message);
+                sendEvent('message', {
+                    index: i,
+                    message: message
+                });
+            }
+        }
+
+        // Send complete event with all messages
+        sendEvent('complete', { messages: translatedMessages });
+        
+        return translatedMessages;
     }
 }
 

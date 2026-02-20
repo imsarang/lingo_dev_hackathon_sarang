@@ -8,5 +8,34 @@
     "center": "centro",
     "deployNow": "Desplegar Ahora",
     "documentation": "Documentación"
+  },
+  "chat": {
+    "header": {
+      "title": "Asistente de IA",
+      "subtitle": "Pregúntame lo que quieras sobre tus documentos",
+      "clearButton": "Limpiar Chat"
+    },
+    "emptyState": {
+      "title": "Inicia una conversación",
+      "description": "Haz preguntas sobre tus documentos y te proporcionaré respuestas detalladas basadas en el contenido.",
+      "tryAsking": "Prueba preguntando:"
+    },
+    "input": {
+      "placeholder": "Escribe tu mensaje...",
+      "sendButton": "Enviar"
+    },
+    "errors": {
+      "noResponse": "Lo siento, no pude generar una respuesta.",
+      "general": "Lo siento, encontré un error. Por favor, inténtalo de nuevo."
+    },
+    "loading": {
+      "thinking": "Pensando..."
+    },
+    "examples": {
+      "question1": "¿Cuáles son los temas principales cubiertos en los documentos?",
+      "question2": "¿Puedes resumir los hallazgos clave?",
+      "question3": "¿Cuáles son las recomendaciones mencionadas?",
+      "question4": "Compara los diferentes enfoques discutidos"
+    }
   }
 }
