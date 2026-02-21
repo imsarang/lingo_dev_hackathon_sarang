@@ -11,7 +11,11 @@
     "inspect": "ts-node src/scripts/inspect-chromadb.ts",
     "chromadb:start": "docker-compose -f docker-compose.chromadb.yml up -d",
     "chromadb:stop": "docker-compose -f docker-compose.chromadb.yml down",
-    "chromadb:logs": "docker-compose -f docker-compose.chromadb.yml logs -f"
+    "chromadb:logs": "docker-compose -f docker-compose.chromadb.yml logs -f",
+    "db:push": "prisma db push --schema=./src/db/prima/schema.prisma",
+    "db:generate": "prisma generate --schema=./src/db/prima/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=./src/db/prima/schema.prisma --name init",
+    "db:studio": "prisma studio --schema=./src/db/prima/schema.prisma"
   },
   "author": "",
   "license": "ISC",
@@ -19,7 +23,9 @@
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.16.0",
     "@types/uuid": "^10.0.0",
+    "prisma": "^7.4.1",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0"
   },
@@ -33,15 +39,20 @@
     "@langchain/core": "^1.1.24",
     "@langchain/langgraph": "^1.1.4",
     "@langchain/openai": "^1.2.7",
+    "@prisma/adapter-pg": "^7.4.1",
+    "@prisma/client": "^7.4.1",
     "@types/cors": "^2.8.19",
     "chromadb": "^3.3.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "google-auth-library": "^10.5.0",
     "langchain": "^1.2.24",
+    "lingo.dev": "^0.131.7",
     "nodemon": "^3.1.11",
     "openai": "^6.22.0",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.18.0",
     "redis": "^5.11.0",
     "uuid": "^13.0.0"
   }

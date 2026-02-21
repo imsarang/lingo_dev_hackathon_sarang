@@ -2,6 +2,7 @@ import { IngestionRequest, ingestionService } from "../services/ingestion.servic
 import { Request, Response } from "express";
 import { sessionService } from "../services/session.service";
 import { cacheService } from "../services/cache.service";
+import { dbService } from "../services/db.service";
 
 // Ingestion controller
 export class IngestController {
@@ -30,98 +31,6 @@ export class IngestController {
         catch(error){
             res.status(500).json({
                 message: "Error ingesting document from S3",
-                error: error instanceof Error ? error.message : 'Unknown error'
-            })
-        }
-    }
-
-    async queryDocuments(
-        req: Request,
-        res: Response
-    ){
-        try{
-            const {query, nResults, filter} = req.body
-
-            if(!query){
-                return res.status(400).json({
-                    message: "Query is required"
-                })
-            }
-
-            const queryResponse = await ingestionService.queryVectorDatabase(query, nResults, filter)
-            res.status(200).json(queryResponse)
-        }
-        catch(error){
-            res.status(500).json({
-                message: "Error querying documents",
-                error: error instanceof Error ? error.message : 'Unknown error'
-            })
-        }
-    }
-
-    // LangGraph RAG endpoint with translation support
-    async queryRAG(
-        req: Request,
-        res: Response
-    ){
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log('[CONTROLLER] RAG Query Started')
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        
-        try{
-            const { question, locale } = req.body
-            let { sessionId } = req.body
-
-            console.log('[CONTROLLER] Request params:', {
-                question: question?.substring(0, 100) + (question?.length > 100 ? '...' : ''),
-                locale: locale || 'en',
-                sessionId: sessionId || 'none (will create new)'
-            })
-
-            if(!question){
-                console.log('[CONTROLLER] ❌ Validation failed: Question is required')
-                return res.status(400).json({
-                    message: "Question is required"
-                })
-            }
-
-            // Generate sessionId if not provided (first conversation)
-            if(!sessionId) {
-                sessionId = sessionService.createSession()
-                console.log(`[CONTROLLER] ✅ New session created: ${sessionId}`)
-            } else {
-                console.log(`[CONTROLLER] 🔄 Using existing session: ${sessionId}`)
-            }
-
-            console.log('[CONTROLLER] 📞 Calling ingestionService.queryWithRAG...')
-            const startTime = Date.now()
-            const result = await ingestionService.queryWithRAG(question, sessionId, locale || 'en')
-            const duration = Date.now() - startTime
-
-            console.log(`[CONTROLLER] ✅ RAG Query completed in ${duration}ms`)
-            console.log('[CONTROLLER] Response summary:', {
-                answerLength: result.answer.length,
-                contextCount: result.context.length,
-                sessionId
-            })
-
-            res.status(200).json({
-                question,
-                answer: result.answer,
-                contextCount: result.context.length,
-                context: result.context.slice(0, 3),
-                sessionId: sessionId
-            })
-            
-            console.log('[CONTROLLER] ✅ Response sent successfully')
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
-        }
-        catch(error){
-            console.error('[CONTROLLER] ❌ Error in RAG query:')
-            console.error('[CONTROLLER] Error details:', error)
-            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
-            res.status(500).json({
-                message: "Error in RAG query",
                 error: error instanceof Error ? error.message : 'Unknown error'
             })
         }
@@ -184,6 +93,7 @@ export class IngestController {
         try{
             const { question, locale } = req.body
             let { sessionId } = req.body
+            const currentLocale = locale || 'en'
 
             if(!question){
                 sendEvent('error', { message: 'Question is required' })
@@ -197,17 +107,55 @@ export class IngestController {
                 sendEvent('session', { sessionId })
             }
 
+            // Save to DB if user is logged in
+            let dbSessionId: bigint | null = null
+            if (req.user && req.user.googleId && req.user.email) {
+                try {
+                    const user = await dbService.getOrCreateUser(
+                        req.user.googleId,
+                        req.user.email,
+                        req.user.name || undefined
+                    )
+                    const chatSession = await dbService.getOrCreateChatSession(sessionId, user.id)
+                    dbSessionId = chatSession.id
+                    
+                    // Save user message
+                    await dbService.createUserMessage(
+                        dbSessionId,
+                        question,
+                        currentLocale,
+                        currentLocale === 'en' ? question : undefined
+                    )
+                } catch (dbError) {
+                    console.error('[INGEST CONTROLLER] DB error (continuing):', dbError)
+                }
+            }
+
             // Stream the RAG process
-            // Note: ingestionService.queryWithRAGStream already sends the 'complete' event
-            // with the final answer, so we don't need to send another one here
+            let finalAnswer: string | null = null
             await ingestionService.queryWithRAGStream(
                 question,
                 sessionId,
-                locale || 'en',
-                sendEvent // Pass callback to send events
+                currentLocale,
+                sendEvent,
+                (answer: string) => { finalAnswer = answer }
             )
 
-            // Close the stream - ingestionService already sent the complete event
+            // Save assistant message to DB if user is logged in
+            if (dbSessionId && finalAnswer) {
+                try {
+                    await dbService.createAssistantMessage(
+                        dbSessionId,
+                        finalAnswer,
+                        currentLocale,
+                        currentLocale === 'en' ? finalAnswer : undefined
+                    )
+                } catch (dbError) {
+                    console.error('[INGEST CONTROLLER] DB error saving assistant message:', dbError)
+                }
+            }
+
+            // Close the stream
             res.end()
             
         } catch(error){

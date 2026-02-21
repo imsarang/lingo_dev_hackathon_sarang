@@ -98,20 +98,6 @@ export class IngestionService {
         }
     }
 
-    async queryVectorDatabase(
-        query: string,
-        nResults: number = 5,
-        filter?: Record<string, any>,
-    ){
-        try{
-            const results = await vectorDBClient.query(query, nResults, filter)
-            return results?.documents ?? []
-        }
-        catch(error){
-            throw error
-        }
-    }
-
     async queryWithRAG(question: string, sessionId: string, locale: string = 'en') {
         console.log('\n[INGESTION SERVICE] Starting queryWithRAG')
         console.log('[INGESTION SERVICE] Input params:', {
@@ -219,7 +205,8 @@ export class IngestionService {
         question: string,
         sessionId: string,
         locale: string,
-        sendEvent: (type: string, data: any) => void
+        sendEvent: (type: string, data: any) => void,
+        onComplete?: (answer: string) => void
     ) {
         try {
             // Stage 1: Check cache
@@ -256,6 +243,7 @@ export class IngestionService {
                     sessionId,
                     cached: true
                 })
+                if (onComplete) onComplete(cached.answer)
                 return
             }
 
@@ -360,6 +348,8 @@ export class IngestionService {
                 sessionId,
                 cached: false
             })
+
+            if (onComplete) onComplete(translatedAnswer)
 
         } catch (error) {
             // Only send error if not already sent (prevent duplicates)

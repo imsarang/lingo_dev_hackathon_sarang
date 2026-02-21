@@ -47,7 +47,7 @@ export default function LanguageSwitcher() {
       segments.unshift(locale);
     }
     
-    localStorage.setItem('currentLocale', locale)
+    // localStorage.setItem('currentLocale', locale)
     
     router.push('/' + segments.join('/'));
   };
