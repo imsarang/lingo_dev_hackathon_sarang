@@ -1,4 +1,5 @@
 {
+  "$schema": "https://lingo.dev/schema/i18n.json",
   "version": "1.12",
   "locale": {
     "source": "en",
@@ -16,5 +17,9 @@
       ]
     }
   },
-  "$schema": "https://lingo.dev/schema/i18n.json"
+  "provider": {
+    "id": "openai",
+    "model": "gpt-4o-mini",
+    "prompt": "Translate the provided text from {source} to {target}."
+  }
 }

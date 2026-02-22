@@ -11,6 +11,7 @@ export default async function Home({
 }) {
   const { locale } = await params;
   const t = await getTranslations('common');
+  const tHome = await getTranslations('home');
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
@@ -29,10 +30,10 @@ export default async function Home({
         />
         <div className="flex flex-col items-center gap-8 text-center sm:items-start sm:text-left w-full">
           <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            AI Document Assistant
+            {tHome('title')}
           </h1>
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Choose how you want to interact with your documents. Chat with our AI assistant or analyze reports with advanced tools.
+            {tHome('subtitle')}
           </p>
         </div>
         <div className="flex flex-col gap-6 w-full mt-12 sm:flex-row">
@@ -53,9 +54,9 @@ export default async function Home({
                 d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
               />
             </svg>
-            <h2 className="text-2xl font-bold">Chat with Bot</h2>
+            <h2 className="text-2xl font-bold">{tHome('chat.title')}</h2>
             <p className="text-center text-blue-100">
-              Ask questions and get answers from your documents using advanced RAG technology
+              {tHome('chat.description')}
             </p>
           </Link>
           <Link
@@ -75,9 +76,9 @@ export default async function Home({
                 d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <h2 className="text-2xl font-bold">Report Analyzer</h2>
+            <h2 className="text-2xl font-bold">{tHome('analyzer.title')}</h2>
             <p className="text-center text-green-100">
-              Upload and analyze reports with AI-powered insights, keyword suggestions, and benchmarking
+              {tHome('analyzer.description')}
             </p>
           </Link>
         </div>

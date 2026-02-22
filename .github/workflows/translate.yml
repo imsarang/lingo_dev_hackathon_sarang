@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - "frontend/locales/**"
   workflow_dispatch:
 
 jobs:
@@ -26,9 +24,14 @@ jobs:
       - name: Run Lingo.dev CI
         working-directory: frontend
         env:
-          LINGODOTDEV_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
+          LINGO_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: npx lingo.dev@latest ci --no-interactive
+        run: |
+          echo "Running Lingo.dev translation..."
+          # Remove empty locale directories if they exist (they can confuse Lingo.dev)
+          rm -rf locales/*/
+          # Run Lingo.dev CI - it will update existing translations when en.json changes
+          npx lingo.dev@latest ci --no-interactive
 
       - name: Commit and push translations
         run: |
