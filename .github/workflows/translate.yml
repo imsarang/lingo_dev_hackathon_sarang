@@ -25,10 +25,10 @@ jobs:
 
       - name: Run Lingo.dev CI
         working-directory: frontend
-        run: |
-          api-key="${{ secrets.LINGODOTDEV_API_KEY }}" \
-          OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-          npx lingo.dev@latest ci --no-interactive
+        env:
+          LINGODOTDEV_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npx lingo.dev@latest ci --no-interactive
 
       - name: Commit and push translations
         run: |
