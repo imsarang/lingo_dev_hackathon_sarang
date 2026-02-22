@@ -14,8 +14,14 @@ import { sqsConsumerService } from './services/sqs-consumer.service';
 const app = express()
 
 // Enable CORS for frontend
+const allowedOrigins = [
+    'http://localhost:3001',
+    'http://localhost:3000',
+    process.env.CORS_ORIGIN || process.env.FRONTEND_URL
+].filter(Boolean) // Remove undefined values
+
 app.use(cors({
-    origin: ['http://localhost:3001', 'http://localhost:3000'], // Support both Next.js ports
+    origin: allowedOrigins.length > 0 ? allowedOrigins : '*', // Fallback to * if no origins specified
     credentials: true
 }))
 

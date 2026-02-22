@@ -24,7 +24,7 @@ const STORAGE_KEYS = {
   IS_TRANSLATING: 'isTranslating'
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '@/config/api';
 
 export default function ChatInterface() {
   const params = useParams();
@@ -208,7 +208,7 @@ export default function ChatInterface() {
       if (!idToken) return;
 
       setIsLoadingSessions(true);
-      const response = await fetch(`${API_URL}/api/users/sessions`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/sessions`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${idToken}`,
@@ -246,7 +246,7 @@ export default function ChatInterface() {
       setSessionId(sessionUuid);
       setMessages([]);
 
-      const response = await fetch(`${API_URL}/api/users/sessions/${sessionUuid}/messages`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/sessions/${sessionUuid}/messages`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${idToken}`,
@@ -283,7 +283,7 @@ export default function ChatInterface() {
       const idToken = (currentSession as any)?.idToken;
       if (!idToken) return;
 
-      const response = await fetch(`${API_URL}/api/users/sessions/${sessionUuid}`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/sessions/${sessionUuid}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${idToken}`,
@@ -330,7 +330,7 @@ export default function ChatInterface() {
 
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_URL}/api/translate`, {
+      const response = await fetch(`${API_BASE_URL}/api/translate`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ 
@@ -504,7 +504,7 @@ export default function ChatInterface() {
 
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_URL}/api/ingest/rag/stream`, {
+      const response = await fetch(`${API_BASE_URL}/api/ingest/rag/stream`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ 

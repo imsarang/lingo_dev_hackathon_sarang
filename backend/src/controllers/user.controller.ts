@@ -58,7 +58,7 @@ class UserController {
 
             return res.status(200).json({
                 success: true,
-                sessions: sessions.map(s => ({
+                sessions: sessions.map((s: any) => ({
                     id: s.id.toString(),
                     sessionUuid: s.sessionUuid,
                     createdAt: s.createdAt,
@@ -130,7 +130,7 @@ class UserController {
                     sessionUuid: session.sessionUuid,
                     createdAt: session.createdAt
                 },
-                messages: session.messages.map(m => ({
+                messages: session.messages.map((m: any) => ({
                     id: m.id.toString(),
                     role: m.role,
                     content: m.content,
