@@ -4,18 +4,19 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'frontend/**'
-      - 'i18n.json'
   workflow_dispatch:
 
 jobs:
   translate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,13 +25,17 @@ jobs:
           
       - name: Run Lingo.dev CI
         env:
-          OPENAI_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
+          LINGO_DOT_DEV_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
         run: npx lingo.dev@latest ci --no-interactive
       
-      - name: Commit translations
+      - name: Commit and push translations
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add frontend/locales/*.json || true
-          git diff --staged --quiet || git commit -m "chore: update translations [skip ci]" || true
-          git push || echo "Nothing to push"
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(i18n): auto-translate updated strings [skip ci]"
+            git push
+          else
+            echo "No translation updates needed"
+          fi
