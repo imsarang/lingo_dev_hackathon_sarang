@@ -59,6 +59,21 @@ jobs:
               sudo systemctl enable docker
             fi
             
+            # Fix Docker permissions (add user to docker group if needed)
+            if ! groups | grep -q docker; then
+              sudo usermod -aG docker $USER
+              newgrp docker || true
+            fi
+            
+            # Use sudo for docker commands if permission denied
+            if ! docker ps &> /dev/null 2>&1; then
+              DOCKER_CMD="sudo docker"
+              COMPOSE_PREFIX="sudo "
+            else
+              DOCKER_CMD="docker"
+              COMPOSE_PREFIX=""
+            fi
+            
             # Ensure directory exists
             mkdir -p ~/lingo-dev
             cd ~/lingo-dev
@@ -78,14 +93,23 @@ jobs:
             fi
             
             # Use docker compose (v2) or docker-compose (v1)
-            if docker compose version &> /dev/null 2>&1; then
-              COMPOSE_CMD="docker compose"
+            if $DOCKER_CMD compose version &> /dev/null 2>&1; then
+              COMPOSE_CMD="$COMPOSE_PREFIX docker compose"
+            elif command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="$COMPOSE_PREFIX docker-compose"
             else
-              COMPOSE_CMD="docker-compose"
+              echo "docker-compose not found"
+              exit 1
             fi
             
             # Login to Docker Hub
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            
+            # Create .env file if it doesn't exist (docker-compose will use env vars from GitHub secrets if needed)
+            if [ ! -f ".env" ]; then
+              echo "Creating minimal .env file..."
+              touch .env
+            fi
             
             # Pull latest image and restart services
             $COMPOSE_CMD -f docker-compose.production.yml pull
