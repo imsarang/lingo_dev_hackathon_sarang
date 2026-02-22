@@ -130,6 +130,18 @@ export class ChromaDBController {
             });
         }
     }
+
+    async getCompanies(req: Request, res: Response){
+        try{
+            const companies = await chromaUtils.getCompanies()
+            res.status(200).json({companies})
+        }
+        catch(err){
+            res.status(500).json({
+                error: err
+            })
+        }
+    }
 }
 
 export const chromaDBController = new ChromaDBController();

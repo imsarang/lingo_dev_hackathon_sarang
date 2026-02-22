@@ -8,6 +8,7 @@ import ingestRoutes from './routes/ingest.routes'
 import chromadbRoutes from './routes/chromadb.routes'
 import translateRoutes from './routes/translate.route'
 import userRoutes from './routes/user.route'
+import reportRoutes from './routes/report.routes';
 
 const app = express()
 
@@ -22,6 +23,7 @@ app.use('/api/ingest', ingestRoutes)
 app.use('/api/chromadb', chromadbRoutes)
 app.use('/api/translate', translateRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/reports', reportRoutes)
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {

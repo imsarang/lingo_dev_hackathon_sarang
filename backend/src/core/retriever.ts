@@ -11,6 +11,7 @@
 import { InferenceClient } from "@huggingface/inference"
 import { vectorDBClient } from "../db/client"
 import { QuestionIntent } from "./metadata"
+import { promptService, PromptTask } from "../services/prompt.service"
 
 // ============================================================================
 // Types & Interfaces
@@ -325,36 +326,28 @@ export class RetrieverService {
 
     /**
      * Builds the prompt for LLM generation
+     * Uses prompt service for chat tasks (with or without history)
      * 
      * @param state - Current RAG state
-     * @param conversationHistory - Optional conversation history
+     * @param conversationHistory - Optional conversation history (only for chat)
      * @returns Formatted prompt string
      */
     private buildPrompt(state: RAGState, conversationHistory?: string): string {
         const contextText = state.context.slice(0, 3).join("\n\n")
 
+        // Use prompt service for chat tasks
         if (conversationHistory && conversationHistory.trim().length > 0) {
-            return `You are a helpful AI assistant. Use the conversation history and document context to answer the question.
-
-Conversation History:
-${conversationHistory}
-
-Document Context:
-${contextText}
-
-Current Question: ${state.question}
-
-Answer (be conversational and refer to previous context when relevant):`
+            return promptService.getPrompt(PromptTask.CHAT_ANSWER_WITH_HISTORY, {
+                question: state.question,
+                context: contextText,
+                conversationHistory: conversationHistory
+            });
         }
 
-        return `Answer the following question based on the context provided.
-
-Context:
-${contextText}
-
-Question: ${state.question}
-
-Answer:`
+        return promptService.getPrompt(PromptTask.CHAT_ANSWER, {
+            question: state.question,
+            context: contextText
+        });
     }
 
     /**

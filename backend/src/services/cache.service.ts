@@ -244,6 +244,93 @@ class CacheService{
             console.error('[CACHE SERVICE] Error caching translation:', err);
         }
     }
+
+    async cacheReport(
+        report: {
+            metadata: { company: string, year: number, documentType: string },
+            sentiment: string,
+            analyses: Array<{ chunkId: string, text: string, analysis: string }>,
+            chunks: Array<{ text: string, sectionType: string }>
+        },
+        sessionId: string
+    ): Promise<void> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected, skipping report cache');
+            return;
+        }
+
+        try {
+            const key = `report:${sessionId}`;
+            const importantChunks: Array<{ chunkId: string, text: string, analysis: string }> = [];
+
+            for (const item of report.analyses) {
+                try {
+                    const analysisJson = JSON.parse(item.analysis);
+                    const metrics = analysisJson.analysis || analysisJson;
+                    
+                    // Score calculation: complexity + sentiment + risk factors
+                    const complexityScore = metrics.complexityScore || 0;
+                    const sentimentScore = metrics.sentimentScore || 0;
+                    const riskCount = (metrics.riskFactors || []).length;
+                    const metricsCount = (metrics.keyMetrics || []).length;
+                    
+                    // Total importance score
+                    const importanceScore = complexityScore * 0.3 + sentimentScore * 0.3 + riskCount * 10 + metricsCount * 5;
+                    
+                    // Keep chunks with score > 50
+                    if (importanceScore > 50) {
+                        importantChunks.push(item);
+                    }
+                } catch (parseErr) {
+                    console.warn(`[CACHE SERVICE] Could not parse analysis for chunk ${item.chunkId}`);
+                }
+            }
+
+            const cacheData = {
+                metadata: report.metadata,
+                sentiment: report.sentiment,
+                analyses: report.analyses,
+                importantChunks: importantChunks,
+                timestamp: new Date().toISOString()
+            };
+
+            await this.client.setEx(key, 86400, JSON.stringify(cacheData));
+            console.log(`[CACHE SERVICE] 💾 Cached report: ${key} (${importantChunks.length} important chunks)`);
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error caching report:', err);
+            throw err;
+        }
+    }
+
+    async getCachedReport(sessionId: string): Promise<any | null> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected');
+            return null;
+        }
+        
+        try {
+            const key = `report:${sessionId}`;
+            const data = await this.client.get(key);
+            return data ? JSON.parse(data) : null;
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error getting cached report:', err);
+            return null;
+        }
+    }
+
+    async cacheAnalysis(key: string, analysisData: any): Promise<void> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected, skipping analysis cache');
+            return;
+        }
+
+        try {
+            await this.client.setEx(key, 86400, JSON.stringify(analysisData));
+            console.log(`[CACHE SERVICE] 💾 Cached analysis: ${key}`);
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error caching analysis:', err);
+        }
+    }
 }
 
 export const cacheService = new CacheService()

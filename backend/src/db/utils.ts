@@ -175,6 +175,40 @@ export class ChromaDBUtils {
             throw error;
         }
     }
+
+    /**
+     * Get all unique companies from the collection
+     */
+    async getCompanies(): Promise<string[]> {
+        try {
+            await vectorDBClient.initialize();
+            const collection = (vectorDBClient as any).collection;
+            
+            if (!collection) {
+                throw new Error('Collection not initialized');
+            }
+
+            // Get all documents with their metadata
+            const result = await collection.get({
+                include: ['metadatas']
+            });
+            
+            // Extract unique company names from metadata
+            const companiesSet = new Set<string>();
+            if (result.metadatas) {
+                result.metadatas.forEach((metadata: any) => {
+                    if (metadata?.company) {
+                        companiesSet.add(metadata.company);
+                    }
+                });
+            }
+            
+            return Array.from(companiesSet).sort();
+        } catch (error) {
+            console.error('Error getting companies:', error);
+            throw error;
+        }
+    }
 }
 
 export const chromaUtils = new ChromaDBUtils();
