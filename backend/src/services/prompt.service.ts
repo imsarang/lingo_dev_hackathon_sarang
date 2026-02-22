@@ -55,7 +55,11 @@ class PromptService {
                 return this.getReportAnalyzePrompt(data.content || '', data.sectionId || '');
             
             case PromptTask.REPORT_IMPROVE:
-                return this.getReportImprovePrompt(data.content || '', data.sectionId || '');
+                return this.getReportImprovePrompt(
+                    data.content || '', 
+                    data.sectionId || '',
+                    data.context || undefined
+                );
             
             case PromptTask.REPORT_KEYWORDS:
                 return this.getReportKeywordsPrompt(
@@ -147,19 +151,48 @@ Provide analysis in JSON format with:
 Analysis:`;
     }
 
-    private getReportImprovePrompt(content: string, sectionId: string): string {
-        return `Improve the following report section for clarity, professionalism, and impact.
+    private getReportImprovePrompt(content: string, sectionId: string, context?: string): string {
+        const contextPart = context ? `\n\nPrevious Analysis Context:\n${context}` : '';
+        
+        return `You are an expert financial report editor. Improve the following report section for clarity, professionalism, and impact.
 
 Section: ${sectionId}
 Current Content:
-${content}
+${content}${contextPart}
 
-Provide:
-1. Improved version of the content
-2. List of specific improvements made
-3. Suggestions for further enhancement
+CRITICAL INSTRUCTIONS:
+1. You MUST respond with ONLY valid JSON
+2. Do NOT include markdown code blocks (no \`\`\`json)
+3. Do NOT include any text before or after the JSON
+4. Start your response with { and end with }
+5. Ensure all strings are properly escaped
+6. The JSON must be valid and parseable
 
-Improved Content:`;
+Required JSON structure (copy this exact format):
+{
+  "content": "complete improved version of the entire section text",
+  "improvements": [
+    {
+      "type": "clarity",
+      "description": "brief description of what was improved",
+      "before": "exact original text snippet that was changed",
+      "after": "exact improved text snippet"
+    }
+  ],
+  "examples": [
+    "example of professional phrasing used",
+    "example of improved clarity"
+  ]
+}
+
+Rules for improvements array:
+- Include 3-5 improvement items
+- Each item must have: type, description, before, after
+- type must be one of: "clarity", "professionalism", "structure", "tone"
+- before and after should be actual text snippets from the content (20-100 characters each)
+- examples array should contain 2-3 short example phrases
+
+Return ONLY the JSON object now:`;
     }
 
     private getReportKeywordsPrompt(
@@ -288,6 +321,54 @@ Required JSON structure:
 }
 
 Return ONLY the JSON object, nothing else:`;
+    }
+
+    getBenchmarkExamples(companySize: string): string {
+        const examples: Record<string, string> = {
+            large_cap: `Example 1 (Large Cap - Reliance Industries):
+- Revenue: ₹ 4,00,000+ crore (typical for large cap)
+- Risk Transparency: High (comprehensive risk disclosure)
+- Assertiveness: High (confident tone, clear projections)
+- Complexity Score: 65 (moderate complexity, accessible language)
+- Sentiment Score: 82 (positive outlook)
+
+Example 2 (Large Cap - TCS):
+- Revenue: ₹ 1,50,000+ crore (typical for large cap IT)
+- Risk Transparency: High (detailed risk factors)
+- Assertiveness: Medium-High (balanced confidence)
+- Complexity Score: 58 (clear and concise)
+- Sentiment Score: 85 (very positive)`,
+
+            medium_cap: `Example 1 (Medium Cap - Tech Mahindra):
+- Revenue: ₹ 30,000-50,000 crore (typical for medium cap)
+- Risk Transparency: Medium (standard risk disclosure)
+- Assertiveness: Medium (cautious optimism)
+- Complexity Score: 62 (moderate complexity)
+- Sentiment Score: 75 (positive)
+
+Example 2 (Medium Cap - Wipro):
+- Revenue: ₹ 50,000-80,000 crore (typical for medium cap)
+- Risk Transparency: Medium-High (good risk coverage)
+- Assertiveness: Medium (balanced approach)
+- Complexity Score: 60 (accessible language)
+- Sentiment Score: 78 (positive outlook)`,
+
+            small_cap: `Example 1 (Small Cap - Typical):
+- Revenue: ₹ 1,000-10,000 crore (typical for small cap)
+- Risk Transparency: Low-Medium (basic risk disclosure)
+- Assertiveness: Low-Medium (conservative tone)
+- Complexity Score: 55 (simpler language)
+- Sentiment Score: 70 (neutral to positive)
+
+Example 2 (Small Cap - Growing Company):
+- Revenue: ₹ 5,000-15,000 crore (growing small cap)
+- Risk Transparency: Medium (improving disclosure)
+- Assertiveness: Medium (gaining confidence)
+- Complexity Score: 58 (developing sophistication)
+- Sentiment Score: 72 (optimistic)`
+        };
+
+        return examples[companySize] || examples.small_cap;
     }
 }
 

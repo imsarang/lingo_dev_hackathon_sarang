@@ -290,6 +290,7 @@ class CacheService{
                 metadata: report.metadata,
                 sentiment: report.sentiment,
                 analyses: report.analyses,
+                chunks: report.chunks || [],
                 importantChunks: importantChunks,
                 timestamp: new Date().toISOString()
             };
@@ -329,6 +330,51 @@ class CacheService{
             console.log(`[CACHE SERVICE] 💾 Cached analysis: ${key}`);
         } catch (err) {
             console.error('[CACHE SERVICE] Error caching analysis:', err);
+        }
+    }
+
+    async getCachedAnalysis(sessionId: string): Promise<any | null> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected');
+            return null;
+        }
+
+        try {
+            const key = `report:analysis:${sessionId}`;
+            const data = await this.client.get(key);
+            return data ? JSON.parse(data) : null;
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error getting cached analysis:', err);
+            return null;
+        }
+    }
+
+    async cacheReportSections(sections: any[], sessionId: string): Promise<void> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected, skipping sections cache');
+            return;
+        }
+        try {
+            const key = `report:sections:${sessionId}`;
+            await this.client.setEx(key, 86400, JSON.stringify(sections));
+            console.log(`[CACHE SERVICE] 💾 Cached report sections: ${key}`);
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error caching sections:', err);
+        }
+    }
+
+    async getCachedSections(sessionId: string): Promise<any[] | null> {
+        if (!this.client || !this.isConnected) {
+            console.warn('[CACHE SERVICE] ⚠️ Redis not connected');
+            return null;
+        }
+        try {
+            const key = `report:sections:${sessionId}`;
+            const data = await this.client.get(key);
+            return data ? JSON.parse(data) : null;
+        } catch (err) {
+            console.error('[CACHE SERVICE] Error getting cached sections:', err);
+            return null;
         }
     }
 }

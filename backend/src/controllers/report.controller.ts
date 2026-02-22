@@ -36,6 +36,9 @@ class ReportController {
                 chunks: result.chunks
             }, sessionId)
 
+            // Cache sections for section-wise improvements
+            await cacheService.cacheReportSections(result.sections, sessionId)
+
             return res.status(200).json({
                 success: true,
                 data: {
@@ -83,6 +86,29 @@ class ReportController {
         }
         catch(err){
             console.error('[REPORT CONTROLLER] Error in analyzeReport:', err);
+            return res.status(500).json({
+                success: false,
+                message: err instanceof Error ? err.message : "Internal Server Error"
+            })
+        }
+    }
+
+    async improveReport(req: Request, res: Response){
+        try{
+            const { sessionId, sectionId } = req.body;
+            
+            if (!sessionId || !sectionId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Session ID and Section ID are required"
+                });
+            }
+
+            const result = await reportService.improveReport(sessionId, sectionId);
+            return res.status(200).json(result);
+        }   
+        catch(err){
+            console.error('[REPORT CONTROLLER] Error in improveReport:', err);
             return res.status(500).json({
                 success: false,
                 message: err instanceof Error ? err.message : "Internal Server Error"
