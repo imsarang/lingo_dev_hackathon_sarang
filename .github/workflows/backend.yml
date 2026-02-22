@@ -43,7 +43,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "backend/docker-compose.production.yml"
-          target: "~/lingo-dev/"
+          target: "~/lingo-dev/docker-compose.production.yml"
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
@@ -59,7 +59,18 @@ jobs:
               sudo systemctl enable docker
             fi
             
+            # Ensure directory exists
+            mkdir -p ~/lingo-dev
             cd ~/lingo-dev
+            
+            # Copy docker-compose file if not found (fallback)
+            if [ ! -f "docker-compose.production.yml" ]; then
+              echo "docker-compose.production.yml not found, downloading from repository..."
+              curl -o docker-compose.production.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/backend/docker-compose.production.yml || {
+                echo "Failed to download file. Please ensure the file exists in the repository."
+                exit 1
+              }
+            fi
             
             # Use docker compose (v2) or docker-compose (v1)
             if docker compose version &> /dev/null 2>&1; then

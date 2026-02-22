@@ -26,6 +26,7 @@ jobs:
       - name: Run Lingo.dev CI
         env:
           LINGO_DOT_DEV_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npx lingo.dev@latest ci --no-interactive
       
       - name: Commit and push translations
