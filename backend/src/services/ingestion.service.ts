@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { parseFilename, extractKeywords, mapSectionToIntentTags, ChunkMetadata } from "../core/metadata"
 import { sessionService } from "../services/session.service";
 import { cacheService } from "./cache.service";
+import { translateLingoService } from "./translate-lingo.service";
 
 // Ingestion service
 export interface IngestionRequest {
@@ -113,19 +114,36 @@ export class IngestionService {
             const cached = await cacheService.findSimilarCached(question, locale)
 
             if(cached){
-                await sessionService.addMessage(sessionId, 'user', question)
-                await sessionService.addMessage(sessionId, 'assistant', cached.answer)
+                // Translate question and answer to English before saving to DB
+                let englishQuestion = question
+                let englishAnswer = cached.answer
+                
+                try {
+                    // Use provided locale or detect if needed
+                    if (locale !== 'en') {
+                        englishQuestion = await translateLingoService.translate(question, 'en', locale)
+                    }
+                    // Answer is already in the target locale, translate to English
+                    if (locale !== 'en') {
+                        englishAnswer = await translateLingoService.translate(cached.answer, 'en', locale)
+                    }
+                } catch (error) {
+                    console.error('[INGESTION SERVICE] Error translating cached response to English:', error)
+                }
+                
+                await sessionService.addMessage(sessionId, 'user', englishQuestion)
+                await sessionService.addMessage(sessionId, 'assistant', englishAnswer)
                 return {answer: cached.answer, context: cached.context}
             }
             // cache miss
 
+            // Translate question to English before saving to DB (use provided locale, skip detection)
             let englishQuestion = question
             if (locale !== 'en') {
-                console.log(`[INGESTION SERVICE] 🌐 Translating question from ${locale} to English...`)
-                const { translateService } = require('./translate.service')
                 try {
+                    console.log(`[INGESTION SERVICE] 🌐 Translating question from ${locale} to English...`)
                     const startTime = Date.now()
-                    englishQuestion = await translateService.translate(question, 'en')
+                    englishQuestion = await translateLingoService.translate(question, 'en', locale)
                     const duration = Date.now() - startTime
                     console.log(`[INGESTION SERVICE] ✅ Translation completed in ${duration}ms`)
                     console.log('[INGESTION SERVICE] Translated question:', englishQuestion.substring(0, 100))
@@ -134,7 +152,7 @@ export class IngestionService {
                     console.log('[INGESTION SERVICE] Translation error:', error)
                 }
             } else {
-                console.log('[INGESTION SERVICE] ℹ️ Locale is English, skipping translation')
+                console.log('[INGESTION SERVICE] ℹ️ Question is already in English')
             }
             
             // Get conversation history
@@ -170,10 +188,9 @@ export class IngestionService {
             let translatedAnswer = result.answer
             if (locale !== 'en' && result.answer) {
                 console.log(`[INGESTION SERVICE] 🌐 Translating answer back to ${locale}...`)
-                const { translateService } = require('./translate.service')
                 try {
                     const startTime = Date.now()
-                    translatedAnswer = await translateService.translate(result.answer, locale)
+                    translatedAnswer = await translateLingoService.translate(result.answer, locale, 'en')
                     const duration = Date.now() - startTime
                     console.log(`[INGESTION SERVICE] ✅ Answer translation completed in ${duration}ms`)
                 } catch (error) {
@@ -223,8 +240,22 @@ export class IngestionService {
                     message: 'Found cached answer!'
                 })
                 
-                await sessionService.addMessage(sessionId, 'user', question)
-                await sessionService.addMessage(sessionId, 'assistant', cached.answer)
+                // Translate question and answer to English before saving to DB
+                let englishQuestion = question
+                let englishAnswer = cached.answer
+                
+                try {
+                    // Use provided locale for translation (skip detection for speed)
+                    if (locale !== 'en') {
+                        englishQuestion = await translateLingoService.translate(question, 'en', locale)
+                        englishAnswer = await translateLingoService.translate(cached.answer, 'en', locale)
+                    }
+                } catch (error) {
+                    console.error('[INGESTION SERVICE] Error translating cached response to English:', error)
+                }
+                
+                await sessionService.addMessage(sessionId, 'user', englishQuestion)
+                await sessionService.addMessage(sessionId, 'assistant', englishAnswer)
                 
                 // Stream cached answer word by word for smooth UX
                 const words = cached.answer.split(' ')
@@ -252,20 +283,20 @@ export class IngestionService {
                 message: 'Cache miss, processing query...'
             })
 
-            // Stage 2: Translate question
+            // Stage 2: Translate question to English before saving to DB
             let englishQuestion = question
-            if (locale !== 'en') {
-                sendEvent('status', { 
-                    status: 'translating',
-                    message: `Translating question from ${locale} to English...`
-                })
-                
-                const { translateService } = require('./translate.service')
-                try {
-                    englishQuestion = await translateService.translate(question, 'en')
-                } catch (error) {
-                    // Continue with original
+            try {
+                const detectedLocale = await translateLingoService.detectLocale(question)
+                if (detectedLocale !== 'en') {
+                    sendEvent('status', { 
+                        status: 'translating',
+                        message: `Translating question from ${detectedLocale} to English...`
+                    })
+                    englishQuestion = await translateLingoService.translate(question, 'en', detectedLocale)
                 }
+            } catch (error) {
+                console.error('[INGESTION SERVICE] Error translating question to English:', error)
+                // Continue with original
             }
 
             // Stage 3: Get history
@@ -324,9 +355,8 @@ export class IngestionService {
                     message: `Translating answer to ${locale}...`
                 })
                 
-                const { translateService } = require('./translate.service')
                 try {
-                    translatedAnswer = await translateService.translate(result.answer, locale)
+                    translatedAnswer = await translateLingoService.translate(result.answer, locale, 'en')
                 } catch (error) {
                     // Use English answer
                 }
