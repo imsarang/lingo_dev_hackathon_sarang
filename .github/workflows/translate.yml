@@ -25,9 +25,15 @@ jobs:
           
       - name: Run Lingo.dev CI
         env:
+          LINGO_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
           LINGO_DOT_DEV_API_KEY: ${{ secrets.LINGODOTDEV_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: npx lingo.dev@latest ci --no-interactive
+        run: |
+          echo "Checking API keys (first 5 chars only for security)..."
+          echo "LINGO_API_KEY: ${LINGO_API_KEY:0:5}..."
+          echo "LINGO_DOT_DEV_API_KEY: ${LINGO_DOT_DEV_API_KEY:0:5}..."
+          echo "OPENAI_API_KEY: ${OPENAI_API_KEY:0:5}..."
+          npx lingo.dev@latest ci --no-interactive
       
       - name: Commit and push translations
         run: |

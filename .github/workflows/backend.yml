@@ -63,10 +63,15 @@ jobs:
             mkdir -p ~/lingo-dev
             cd ~/lingo-dev
             
+            # Remove directory if it exists (from failed SCP)
+            if [ -d "docker-compose.production.yml" ]; then
+              rm -rf docker-compose.production.yml
+            fi
+            
             # Copy docker-compose file if not found (fallback)
             if [ ! -f "docker-compose.production.yml" ]; then
               echo "docker-compose.production.yml not found, downloading from repository..."
-              curl -o docker-compose.production.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/backend/docker-compose.production.yml || {
+              curl -L -o docker-compose.production.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/backend/docker-compose.production.yml || {
                 echo "Failed to download file. Please ensure the file exists in the repository."
                 exit 1
               }
