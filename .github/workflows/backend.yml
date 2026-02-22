@@ -36,6 +36,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Copy docker-compose file to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "backend/docker-compose.production.yml"
+          target: "~/lingo-dev/"
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -43,7 +52,24 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/lingo-dev/backend
-            docker-compose -f docker-compose.production.yml pull
-            docker-compose -f docker-compose.production.yml up -d --build
-            docker-compose -f docker-compose.production.yml ps
+            # Navigate to root directory
+            mkdir -p ~/lingo-dev
+            cd ~/lingo-dev || { echo "Failed to change directory"; exit 1; }
+            
+            # Check for docker-compose command (try v2 first, then v1)
+            if docker compose version &> /dev/null 2>&1; then
+              COMPOSE_CMD="docker compose"
+            elif command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="docker-compose"
+            else
+              echo "Error: docker-compose not found. Please install it first."
+              exit 1
+            fi
+            
+            # Login to Docker Hub
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            
+            # Pull latest image and restart services
+            $COMPOSE_CMD -f docker-compose.production.yml pull
+            $COMPOSE_CMD -f docker-compose.production.yml up -d
+            $COMPOSE_CMD -f docker-compose.production.yml ps
