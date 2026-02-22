@@ -1,5 +1,8 @@
 FROM node:20-alpine
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl wget
+
 WORKDIR /app
 
 # Copy package files
@@ -7,7 +10,7 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --only=production && npm cache clean --force
 
 # Copy source code
 COPY src ./src
@@ -15,16 +18,21 @@ COPY src ./src
 # Build TypeScript
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Remove source files and dev dependencies to reduce image size
+RUN rm -rf src node_modules && npm ci --only=production && npm cache clean --force
 
-# Environment variables should be set at runtime:
-# - REDIS_URL (default: redis://localhost:6379)
-# - CHROMA_URL (default: http://localhost:8000)
-# - AWS_ACCESS_KEY_ID (required)
-# - AWS_SECRET_ACCESS_KEY (required)
-# - HUGGINGFACE_API_KEY (required)
-# - HUGGINGFACE_MODEL (optional, defaults to meta-llama/Meta-Llama-3-8B-Instruct)
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 # Start the application
 CMD ["node", "dist/server.js"]

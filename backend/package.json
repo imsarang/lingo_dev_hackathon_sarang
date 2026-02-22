@@ -9,6 +9,7 @@
     "dev": "ts-node src/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "inspect": "ts-node src/scripts/inspect-chromadb.ts",
+    "sqs-consumer": "ts-node src/scripts/sqs-consumer.ts",
     "chromadb:start": "docker-compose -f docker-compose.chromadb.yml up -d",
     "chromadb:stop": "docker-compose -f docker-compose.chromadb.yml down",
     "chromadb:logs": "docker-compose -f docker-compose.chromadb.yml logs -f",
@@ -31,6 +32,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.991.0",
+    "@aws-sdk/client-sqs": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.991.0",
     "@chroma-core/default-embed": "^0.1.9",
     "@google-cloud/translate": "^9.3.0",

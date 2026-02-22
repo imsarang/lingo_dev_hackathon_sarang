@@ -12,6 +12,13 @@ dev:
 build:
 	npm run build
 
+# SQS Consumer
+sqs-consumer:
+	npm run sqs-consumer
+
+dev-with-consumer:
+	ENABLE_SQS_CONSUMER=true npm run dev
+
 # API Testing
 stats:
 	@curl -s $(API_URL)/api/chromadb/stats | jq
@@ -61,6 +68,8 @@ clean-db:
 help:
 	@echo "Commands:"
 	@echo "  make dev              - Start server"
+	@echo "  make dev-with-consumer - Start server with SQS consumer"
+	@echo "  make sqs-consumer     - Run SQS consumer separately"
 	@echo "  make stats            - Get stats"
 	@echo "  make count            - Get count"
 	@echo "  make list             - List docs"
@@ -72,4 +81,4 @@ help:
 	@echo "  make delete ID=doc-id"
 	@echo "  make clean-db         - Delete all ChromaDB data"
 
-.PHONY: dev build stats count list ingest query rag ask clear-cache delete clean-db help
+.PHONY: dev build dev-with-consumer sqs-consumer stats count list ingest query rag ask clear-cache delete clean-db help
