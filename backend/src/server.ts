@@ -14,11 +14,12 @@ import { sqsConsumerService } from './services/sqs-consumer.service';
 const app = express()
 
 // Enable CORS for frontend
-const allowedOrigins = [
+const allowedOrigins: string[] = [
     'http://localhost:3001',
     'http://localhost:3000',
-    process.env.CORS_ORIGIN || process.env.FRONTEND_URL
-].filter(Boolean) // Remove undefined values
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL
+].filter((origin): origin is string => typeof origin === 'string' && origin.length > 0)
 
 app.use(cors({
     origin: allowedOrigins.length > 0 ? allowedOrigins : '*', // Fallback to * if no origins specified
