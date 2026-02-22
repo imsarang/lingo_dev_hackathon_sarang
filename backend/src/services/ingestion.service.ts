@@ -269,6 +269,7 @@ export class IngestionService {
                 
                 sendEvent('complete', {
                     answer: cached.answer,
+                    englishAnswer: englishAnswer,
                     context: cached.context,
                     contextCount: cached.context.length,
                     sessionId,
@@ -285,18 +286,17 @@ export class IngestionService {
 
             // Stage 2: Translate question to English before saving to DB
             let englishQuestion = question
-            try {
-                const detectedLocale = await translateLingoService.detectLocale(question)
-                if (detectedLocale !== 'en') {
+            if (locale !== 'en') {
+                try {
                     sendEvent('status', { 
                         status: 'translating',
-                        message: `Translating question from ${detectedLocale} to English...`
+                        message: `Translating question from ${locale} to English...`
                     })
-                    englishQuestion = await translateLingoService.translate(question, 'en', detectedLocale)
+                    englishQuestion = await translateLingoService.translate(question, 'en', locale)
+                } catch (error) {
+                    console.error('[INGESTION SERVICE] Error translating question to English:', error)
+                    // Continue with original
                 }
-            } catch (error) {
-                console.error('[INGESTION SERVICE] Error translating question to English:', error)
-                // Continue with original
             }
 
             // Stage 3: Get history
@@ -373,6 +373,7 @@ export class IngestionService {
             // Send completion
             sendEvent('complete', {
                 answer: translatedAnswer,
+                englishAnswer: result.answer,
                 context: result.context,
                 contextCount: result.context.length,
                 sessionId,

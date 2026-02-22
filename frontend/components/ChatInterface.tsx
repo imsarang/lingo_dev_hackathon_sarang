@@ -321,7 +321,8 @@ export default function ChatInterface() {
     const isLoggedIn = !!currentSession?.user;
     
     setIsTranslating(true);
-    setTranslationSource(localStorage.getItem(STORAGE_KEYS.CURRENT_LOCALE) || 'en');
+    const sourceLocale = localStorage.getItem(STORAGE_KEYS.CURRENT_LOCALE) || 'en';
+    setTranslationSource(sourceLocale);
     setTranslationTarget(targetLocale);
     setTranslationProgress(10);
     localStorage.setItem(STORAGE_KEYS.CURRENT_LOCALE, targetLocale);
@@ -334,6 +335,7 @@ export default function ChatInterface() {
         headers,
         body: JSON.stringify({ 
           messages: messagesToTranslate, 
+          sourceLocale,
           targetLocale 
         }),
       });

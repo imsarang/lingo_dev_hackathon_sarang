@@ -115,6 +115,51 @@ class ReportController {
             })
         }
     }
+
+    async getReport(req: Request, res: Response){
+        try{
+            const sessionIdParam = req.params.sessionId || req.query.sessionId;
+            const sessionId = Array.isArray(sessionIdParam) ? sessionIdParam[0] : sessionIdParam;
+            
+            if (!sessionId || typeof sessionId !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: "Session ID is required"
+                });
+            }
+
+            const cachedReport = await cacheService.getCachedReport(sessionId);
+            const cachedSections = await cacheService.getCachedSections(sessionId);
+            const cachedAnalysis = await cacheService.getCachedAnalysis(sessionId);
+
+            if (!cachedReport) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Report not found"
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    sessionId,
+                    metadata: cachedReport.metadata,
+                    sentiment: cachedReport.sentiment,
+                    analyses: cachedReport.analyses || [],
+                    chunks: cachedReport.chunks || [],
+                    sections: cachedSections || [],
+                    expertAnalysis: cachedAnalysis || null
+                }
+            });
+        }
+        catch(err){
+            console.error('[REPORT CONTROLLER] Error in getReport:', err);
+            return res.status(500).json({
+                success: false,
+                message: err instanceof Error ? err.message : "Internal Server Error"
+            })
+        }
+    }
 }
 
 export const reportController = new ReportController()

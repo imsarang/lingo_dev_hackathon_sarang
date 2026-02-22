@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession, getSession } from 'next-auth/react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { AuthComponent } from './AuthComponent';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface ReportSection {
   id: string;
@@ -37,6 +40,8 @@ const SECTION_TYPE_MAP: Record<string, string> = {
 const BASE_URL = 'http://localhost:3001';
 
 export default function ReportAnalyzer() {
+  const params = useParams();
+  const locale = (params.locale as string) || 'en';
   const { data: session } = useSession();
   const [activeSection, setActiveSection] = useState<string>('executive-summary');
   const [documentMetadata, setDocumentMetadata] = useState<DocumentMetadata | null>(null);
@@ -51,6 +56,14 @@ export default function ReportAnalyzer() {
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
   const [improvedContent, setImprovedContent] = useState<Record<string, any>>({});
   const [isImproving, setIsImproving] = useState<boolean>(false);
+  
+  const [originalSections, setOriginalSections] = useState<ReportSection[]>([]);
+  const [originalAnalyses, setOriginalAnalyses] = useState<any[]>([]);
+  const [originalExpertAnalysis, setOriginalExpertAnalysis] = useState<any>(null);
+  const [originalImprovedContent, setOriginalImprovedContent] = useState<Record<string, any>>({});
+  
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  const [translationProgress, setTranslationProgress] = useState<number>(0);
 
   const currentSection = sections.find(s => s.id === activeSection) || sections[0];
 
@@ -61,6 +74,77 @@ export default function ReportAnalyzer() {
       'Content-Type': 'application/json',
       ...(idToken && { 'Authorization': `Bearer ${idToken}` })
     };
+  };
+
+  const translateText = async (text: string, targetLocale: string, sourceLocale: string = 'en'): Promise<string> => {
+    if (!text || !text.trim() || sourceLocale === targetLocale) return text;
+    
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${BASE_URL}/api/translate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          messages: [{ id: 'single', type: 'user', content: text, timestamp: new Date() }],
+          sourceLocale,
+          targetLocale
+        })
+      });
+
+      if (!response.ok) return text;
+
+      const reader = response.body?.getReader();
+      if (!reader) return text;
+
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+      let translatedText = text;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        textBuffer += decoder.decode(value, { stream: true });
+        const completeMessages = textBuffer.split('\n\n');
+        textBuffer = completeMessages.pop() || '';
+
+        for (const messageText of completeMessages) {
+          if (!messageText.trim()) continue;
+          
+          const eventLine = messageText.match(/^event: (.+)$/m);
+          const dataLine = messageText.match(/^data: (.+)$/m);
+          if (!eventLine || !dataLine) continue;
+
+          const eventType = eventLine[1];
+          const eventData = JSON.parse(dataLine[1]);
+
+          if (eventType === 'complete' && eventData.messages?.[0]?.content) {
+            translatedText = eventData.messages[0].content;
+          } else if (eventType === 'message' && eventData.message?.content) {
+            translatedText = eventData.message.content;
+          }
+        }
+      }
+
+      return translatedText;
+    } catch (error) {
+      console.error('Translation error:', error);
+      return text;
+    }
+  };
+
+  const translateSectionsToEnglish = async (sectionsToTranslate: ReportSection[], sourceLocale: string): Promise<ReportSection[]> => {
+    if (sourceLocale === 'en') return sectionsToTranslate;
+
+    const translatedSections = await Promise.all(
+      sectionsToTranslate.map(async (section) => {
+        if (!section.content || !section.content.trim()) return section;
+        const translatedContent = await translateText(section.content, 'en', sourceLocale);
+        return { ...section, content: translatedContent };
+      })
+    );
+
+    return translatedSections;
   };
 
   const parseAnalysis = (analysisText: string) => {
@@ -125,7 +209,10 @@ export default function ReportAnalyzer() {
 
       const data = result.data;
       setSessionId(data.sessionId);
-      setAnalyses(data.analyses || []);
+      localStorage.setItem('reportSessionId', data.sessionId);
+      const analysesData = data.analyses || [];
+      setAnalyses(analysesData);
+      setOriginalAnalyses(analysesData);
 
       setDocumentMetadata({
         companyName: data.metadata.company || 'Unknown',
@@ -144,10 +231,21 @@ export default function ReportAnalyzer() {
         sectionContent[sectionId] = (sectionContent[sectionId] || '') + chunk.text + '\n\n';
       });
       
-      setSections(prev => prev.map(section => ({
+      let updatedSections = sections.map(section => ({
         ...section,
         content: sectionContent[section.id] || section.content
-      })));
+      }));
+
+      if (locale !== 'en') {
+        const translatedSections = await translateSectionsToEnglish(updatedSections, locale);
+        updatedSections = translatedSections;
+      }
+      
+      setSections(updatedSections);
+      setOriginalSections(updatedSections);
+      
+      // Store the locale when data is first loaded
+      localStorage.setItem('reportCurrentLocale', locale);
 
       let totalRiskCount = 0;
       let totalSentimentScore = 0;
@@ -216,7 +314,47 @@ export default function ReportAnalyzer() {
         return;
       }
 
-      setExpertAnalysis(result.data);
+      let expertAnalysisData = result.data;
+      
+      if (locale !== 'en') {
+        setIsLoadingAnalysis(true);
+        const ea = expertAnalysisData.expertAnalysis || {};
+        
+        if (ea.overallAssessment) {
+          ea.overallAssessment = await translateText(ea.overallAssessment, locale, 'en');
+        }
+        
+        if (Array.isArray(ea.strengths)) {
+          ea.strengths = await Promise.all(
+            ea.strengths.map((s: string) => translateText(s, locale, 'en'))
+          );
+        }
+        
+        if (Array.isArray(ea.weaknesses)) {
+          ea.weaknesses = await Promise.all(
+            ea.weaknesses.map((w: string) => translateText(w, locale, 'en'))
+          );
+        }
+        
+        if (ea.comparisonWithPeers) {
+          ea.comparisonWithPeers = await translateText(ea.comparisonWithPeers, locale, 'en');
+        }
+        
+        if (Array.isArray(expertAnalysisData.improvementSuggestions)) {
+          expertAnalysisData.improvementSuggestions = await Promise.all(
+            expertAnalysisData.improvementSuggestions.map(async (suggestion: any) => ({
+              ...suggestion,
+              suggestion: suggestion.suggestion ? await translateText(suggestion.suggestion, locale, 'en') : suggestion.suggestion,
+              example: suggestion.example ? await translateText(suggestion.example, locale, 'en') : suggestion.example
+            }))
+          );
+        }
+        
+        setIsLoadingAnalysis(false);
+      }
+      
+      setExpertAnalysis(expertAnalysisData);
+      setOriginalExpertAnalysis(expertAnalysisData);
       setActiveView('expert');
 
       if (result.data.companySize) {
@@ -329,17 +467,49 @@ export default function ReportAnalyzer() {
         }
       }
       
+      let finalImprovedContent = improvedContent;
+      let finalImprovements = improvements.filter((imp: any) => 
+        imp && imp.type && imp.description && imp.before && imp.after
+      );
+      let finalExamples = examples.filter((ex: any) => typeof ex === 'string' && ex.trim().length > 0);
+
+      if (locale !== 'en') {
+        setIsImproving(true);
+        
+        finalImprovedContent = await translateText(improvedContent, locale, 'en');
+        
+        finalImprovements = await Promise.all(
+          finalImprovements.map(async (imp: any) => ({
+            ...imp,
+            description: await translateText(imp.description, locale, 'en'),
+            before: await translateText(imp.before, locale, 'en'),
+            after: await translateText(imp.after, locale, 'en')
+          }))
+        );
+        
+        finalExamples = await Promise.all(
+          finalExamples.map((ex: string) => translateText(ex, locale, 'en'))
+        );
+        
+        setIsImproving(false);
+      }
+
+      const improvedContentData = {
+        sectionId: data.sectionId || activeSection,
+        originalContent: data.originalContent || '',
+        improvedContent: finalImprovedContent,
+        improvements: finalImprovements,
+        examples: finalExamples
+      };
+      
       setImprovedContent(prev => ({
         ...prev,
-        [activeSection]: {
-          sectionId: data.sectionId || activeSection,
-          originalContent: data.originalContent || '',
-          improvedContent: improvedContent,
-          improvements: improvements.filter((imp: any) => 
-            imp && imp.type && imp.description && imp.before && imp.after
-          ),
-          examples: examples.filter((ex: any) => typeof ex === 'string' && ex.trim().length > 0)
-        }
+        [activeSection]: improvedContentData
+      }));
+      
+      setOriginalImprovedContent(prev => ({
+        ...prev,
+        [activeSection]: improvedContentData
       }));
 
       setIsImproving(false);
@@ -348,6 +518,518 @@ export default function ReportAnalyzer() {
       setIsImproving(false);
     }
   };
+
+  const fetchTranslations = async (targetLocale: string) => {
+    if (!sessionId || isTranslating) return;
+    
+    const previousLocale = localStorage.getItem('reportCurrentLocale') || 'en';
+    const sourceLocale = previousLocale;
+    
+    if (sourceLocale === targetLocale) return;
+    
+    const itemsToTranslate: any[] = [];
+    
+    const sectionsToTranslate = originalSections.length > 0 ? originalSections : sections;
+    sectionsToTranslate.forEach(section => {
+      if (section.content && section.content.trim()) {
+        itemsToTranslate.push({
+          id: `section-${section.id}`,
+          type: 'user',
+          content: section.content,
+          timestamp: new Date()
+        });
+      }
+    });
+    
+    originalAnalyses.forEach((analysis, index) => {
+      if (analysis.analysis && analysis.analysis.trim()) {
+        itemsToTranslate.push({
+          id: `analysis-${index}`,
+          type: 'user',
+          content: analysis.analysis,
+          timestamp: new Date()
+        });
+      }
+    });
+    
+    if (originalExpertAnalysis?.expertAnalysis) {
+      const ea = originalExpertAnalysis.expertAnalysis;
+      if (ea.overallAssessment) {
+        itemsToTranslate.push({
+          id: 'expert-overall',
+          type: 'user',
+          content: ea.overallAssessment,
+          timestamp: new Date()
+        });
+      }
+      if (Array.isArray(ea.strengths)) {
+        ea.strengths.forEach((strength: string, idx: number) => {
+          itemsToTranslate.push({
+            id: `expert-strength-${idx}`,
+            type: 'user',
+            content: strength,
+            timestamp: new Date()
+          });
+        });
+      }
+      if (Array.isArray(ea.weaknesses)) {
+        ea.weaknesses.forEach((weakness: string, idx: number) => {
+          itemsToTranslate.push({
+            id: `expert-weakness-${idx}`,
+            type: 'user',
+            content: weakness,
+            timestamp: new Date()
+          });
+        });
+      }
+      if (ea.comparisonWithPeers) {
+        itemsToTranslate.push({
+          id: 'expert-comparison',
+          type: 'user',
+          content: ea.comparisonWithPeers,
+          timestamp: new Date()
+        });
+      }
+      if (Array.isArray(originalExpertAnalysis.improvementSuggestions)) {
+        originalExpertAnalysis.improvementSuggestions.forEach((suggestion: any, idx: number) => {
+          if (suggestion.suggestion) {
+            itemsToTranslate.push({
+              id: `suggestion-${idx}`,
+              type: 'user',
+              content: suggestion.suggestion,
+              timestamp: new Date()
+            });
+          }
+          if (suggestion.example) {
+            itemsToTranslate.push({
+              id: `suggestion-example-${idx}`,
+              type: 'user',
+              content: suggestion.example,
+              timestamp: new Date()
+            });
+          }
+        });
+      }
+    }
+    
+    Object.entries(originalImprovedContent).forEach(([sectionId, content]) => {
+      if (content.improvedContent) {
+        itemsToTranslate.push({
+          id: `improved-${sectionId}`,
+          type: 'user',
+          content: content.improvedContent,
+          timestamp: new Date()
+        });
+      }
+      if (Array.isArray(content.improvements)) {
+        content.improvements.forEach((imp: any, idx: number) => {
+          if (imp.description) {
+            itemsToTranslate.push({
+              id: `improvement-desc-${sectionId}-${idx}`,
+              type: 'user',
+              content: imp.description,
+              timestamp: new Date()
+            });
+          }
+          if (imp.before) {
+            itemsToTranslate.push({
+              id: `improvement-before-${sectionId}-${idx}`,
+              type: 'user',
+              content: imp.before,
+              timestamp: new Date()
+            });
+          }
+          if (imp.after) {
+            itemsToTranslate.push({
+              id: `improvement-after-${sectionId}-${idx}`,
+              type: 'user',
+              content: imp.after,
+              timestamp: new Date()
+            });
+          }
+        });
+      }
+      if (Array.isArray(content.examples)) {
+        content.examples.forEach((ex: string, idx: number) => {
+          itemsToTranslate.push({
+            id: `improvement-example-${sectionId}-${idx}`,
+            type: 'user',
+            content: ex,
+            timestamp: new Date()
+          });
+        });
+      }
+    });
+    
+    if (itemsToTranslate.length === 0) return;
+    
+    setIsTranslating(true);
+    setTranslationProgress(10);
+    localStorage.setItem('reportCurrentLocale', targetLocale);
+    localStorage.setItem('isTranslating', 'true');
+    
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${BASE_URL}/api/translate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          messages: itemsToTranslate,
+          sourceLocale,
+          targetLocale
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Translation failed: ${response.status}`);
+      }
+      
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Cannot read response stream');
+      
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+      const translatedItems: Record<string, string> = {};
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        textBuffer += decoder.decode(value, { stream: true });
+        const completeMessages = textBuffer.split('\n\n');
+        textBuffer = completeMessages.pop() || '';
+        
+        for (const messageText of completeMessages) {
+          if (!messageText.trim()) continue;
+          
+          const eventLine = messageText.match(/^event: (.+)$/m);
+          const dataLine = messageText.match(/^data: (.+)$/m);
+          if (!eventLine || !dataLine) continue;
+          
+          const eventType = eventLine[1];
+          const eventData = JSON.parse(dataLine[1]);
+          
+          if (eventType === 'token') {
+            const index = eventData.index;
+            if (itemsToTranslate[index]) {
+              translatedItems[itemsToTranslate[index].id] = eventData.accumulated;
+            }
+          } else if (eventType === 'message') {
+            const index = eventData.index;
+            if (itemsToTranslate[index] && eventData.message?.content) {
+              translatedItems[itemsToTranslate[index].id] = eventData.message.content;
+            }
+            setTranslationProgress(Math.round(((index + 1) / itemsToTranslate.length) * 100));
+          } else if (eventType === 'complete') {
+            setTranslationProgress(100);
+            if (eventData.messages) {
+              eventData.messages.forEach((msg: any, idx: number) => {
+                if (itemsToTranslate[idx]) {
+                  translatedItems[itemsToTranslate[idx].id] = msg.content;
+                }
+              });
+            }
+          } else if (eventType === 'error') {
+            console.error('Translation error:', eventData.message);
+          }
+        }
+      }
+      
+      const updatedSections = sections.map(section => {
+        const translatedId = `section-${section.id}`;
+        if (translatedItems[translatedId]) {
+          return { ...section, content: translatedItems[translatedId] };
+        }
+        return section;
+      });
+      setSections(updatedSections);
+      
+      setAnalyses(prev => prev.map((analysis, index) => {
+        const translatedId = `analysis-${index}`;
+        if (translatedItems[translatedId]) {
+          return { ...analysis, analysis: translatedItems[translatedId] };
+        }
+        return analysis;
+      }));
+      
+      if (originalExpertAnalysis?.expertAnalysis) {
+        const ea = originalExpertAnalysis.expertAnalysis;
+        const updatedEA = { ...originalExpertAnalysis };
+        
+        if (translatedItems['expert-overall']) {
+          updatedEA.expertAnalysis.overallAssessment = translatedItems['expert-overall'];
+        }
+        if (translatedItems['expert-comparison']) {
+          updatedEA.expertAnalysis.comparisonWithPeers = translatedItems['expert-comparison'];
+        }
+        if (Array.isArray(ea.strengths)) {
+          updatedEA.expertAnalysis.strengths = ea.strengths.map((_: string, idx: number) => 
+            translatedItems[`expert-strength-${idx}`] || ea.strengths[idx]
+          );
+        }
+        if (Array.isArray(ea.weaknesses)) {
+          updatedEA.expertAnalysis.weaknesses = ea.weaknesses.map((_: string, idx: number) => 
+            translatedItems[`expert-weakness-${idx}`] || ea.weaknesses[idx]
+          );
+        }
+        if (Array.isArray(originalExpertAnalysis.improvementSuggestions)) {
+          updatedEA.improvementSuggestions = originalExpertAnalysis.improvementSuggestions.map((suggestion: any, idx: number) => ({
+            ...suggestion,
+            suggestion: translatedItems[`suggestion-${idx}`] || suggestion.suggestion,
+            example: translatedItems[`suggestion-example-${idx}`] || suggestion.example
+          }));
+        }
+        
+        setExpertAnalysis(updatedEA);
+      }
+      
+      setImprovedContent(prev => {
+        const updated = { ...prev };
+        Object.entries(originalImprovedContent).forEach(([sectionId, content]) => {
+          const improvedId = `improved-${sectionId}`;
+          if (translatedItems[improvedId]) {
+            updated[sectionId] = {
+              ...content,
+              improvedContent: translatedItems[improvedId]
+            };
+          }
+          
+          if (Array.isArray(content.improvements)) {
+            updated[sectionId] = {
+              ...(updated[sectionId] || content),
+              improvements: content.improvements.map((imp: any, idx: number) => ({
+                ...imp,
+                description: translatedItems[`improvement-desc-${sectionId}-${idx}`] || imp.description,
+                before: translatedItems[`improvement-before-${sectionId}-${idx}`] || imp.before,
+                after: translatedItems[`improvement-after-${sectionId}-${idx}`] || imp.after
+              }))
+            };
+          }
+          
+          if (Array.isArray(content.examples)) {
+            updated[sectionId] = {
+              ...(updated[sectionId] || content),
+              examples: content.examples.map((ex: string, idx: number) => 
+                translatedItems[`improvement-example-${sectionId}-${idx}`] || ex
+              )
+            };
+          }
+        });
+        return updated;
+      });
+      
+    } catch (err) {
+      console.error('Error translating content:', err);
+    } finally {
+      setIsTranslating(false);
+      setTranslationProgress(0);
+      localStorage.setItem('isTranslating', 'false');
+      // Update the stored locale after translation completes
+      localStorage.setItem('reportCurrentLocale', targetLocale);
+    }
+  };
+
+  const restoreReportData = async (savedSessionId: string) => {
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${BASE_URL}/api/reports/${savedSessionId}`, {
+        method: 'GET',
+        headers
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('reportSessionId');
+        return;
+      }
+
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        localStorage.removeItem('reportSessionId');
+        return;
+      }
+
+      const data = result.data;
+      setSessionId(savedSessionId);
+      
+      const analysesData = data.analyses || [];
+      setAnalyses(analysesData);
+      setOriginalAnalyses(analysesData);
+
+      setDocumentMetadata({
+        companyName: data.metadata?.company || 'Unknown',
+        industry: data.metadata?.documentType || 'Unknown',
+        reportYear: data.metadata?.year?.toString() || new Date().getFullYear().toString(),
+        companySize: 'Unknown',
+        riskCount: 0,
+        positiveSignals: 0,
+        sentimentScore: 0,
+        complexityScore: 0
+      });
+
+      const sectionContent: Record<string, string> = {};
+      (data.chunks || []).forEach((chunk: any) => {
+        const sectionId = SECTION_TYPE_MAP[chunk.sectionType] || 'executive-summary';
+        sectionContent[sectionId] = (sectionContent[sectionId] || '') + chunk.text + '\n\n';
+      });
+      
+      let updatedSections = sections.map(section => ({
+        ...section,
+        content: sectionContent[section.id] || section.content
+      }));
+
+      if (locale !== 'en') {
+        const translatedSections = await translateSectionsToEnglish(updatedSections, locale);
+        updatedSections = translatedSections;
+      }
+      
+      setSections(updatedSections);
+      setOriginalSections(updatedSections);
+      
+      // Store the locale of the restored data (always English from cache)
+      localStorage.setItem('reportCurrentLocale', 'en');
+
+      if (data.expertAnalysis) {
+        setExpertAnalysis(data.expertAnalysis);
+        setOriginalExpertAnalysis(data.expertAnalysis);
+      }
+
+      let totalRiskCount = 0;
+      let totalSentimentScore = 0;
+      let totalComplexityScore = 0;
+      let analysisCount = 0;
+
+      if (analysesData.length > 0) {
+        analysesData.forEach((analysis: any) => {
+          try {
+            const parsed = parseAnalysis(analysis.analysis);
+            if (parsed) {
+              if (parsed.riskFactors?.length) totalRiskCount += parsed.riskFactors.length;
+              if (parsed.sentimentScore != null) {
+                totalSentimentScore += Number(parsed.sentimentScore);
+                analysisCount++;
+              }
+              if (parsed.complexityScore != null) {
+                totalComplexityScore += Number(parsed.complexityScore);
+              }
+            }
+          } catch (e) {
+            // Skip invalid
+          }
+        });
+      }
+
+      const avgSentimentScore = analysisCount > 0 ? Math.round(totalSentimentScore / analysisCount) : 0;
+      const avgComplexityScore = analysisCount > 0 ? Math.round(totalComplexityScore / analysisCount) : 0;
+      const positiveSignals = avgSentimentScore > 0 ? Math.max(1, Math.round(avgSentimentScore / 10)) : 0;
+
+      setDocumentMetadata(prev => prev ? {
+        ...prev,
+        riskCount: totalRiskCount,
+        sentimentScore: avgSentimentScore,
+        complexityScore: avgComplexityScore,
+        positiveSignals
+      } : null);
+    } catch (error) {
+      console.error('Error restoring report data:', error);
+      localStorage.removeItem('reportSessionId');
+      }
+    };
+
+  const clearReportData = () => {
+    localStorage.removeItem('reportSessionId');
+    localStorage.removeItem('reportCurrentLocale');
+    localStorage.removeItem('isTranslating');
+    setSessionId(null);
+    setSections(SECTION_LIST.map(s => ({ ...s, content: '' })));
+    setAnalyses([]);
+    setExpertAnalysis(null);
+    setImprovedContent({});
+    setOriginalSections([]);
+    setOriginalAnalyses([]);
+    setOriginalExpertAnalysis(null);
+    setOriginalImprovedContent({});
+    setDocumentMetadata(null);
+    setActiveView('insights');
+    setActiveSection('executive-summary');
+  };
+
+  const handleRefresh = () => {
+    clearReportData();
+    window.location.reload();
+  };
+  
+  useEffect(() => {
+    let isMounted = true;
+    let translationTimeout: NodeJS.Timeout | null = null;
+    
+    const initializeData = async () => {
+      const savedSessionId = localStorage.getItem('reportSessionId');
+      const currentSessionId = sessionId || savedSessionId;
+      
+      if (savedSessionId && !sessionId) {
+        // Restore data from cache
+        await restoreReportData(savedSessionId);
+        
+        // After restoring data, check if translation is needed
+        // Wait for state to update, then check and translate
+        if (isMounted) {
+          translationTimeout = setTimeout(() => {
+            if (isMounted) {
+              const storedLocale = localStorage.getItem('reportCurrentLocale') || 'en';
+              if (storedLocale !== locale) {
+                // Use a small delay to ensure state is updated
+                setTimeout(() => {
+                  if (isMounted) {
+                    fetchTranslations(locale);
+                  }
+                }, 300);
+              }
+            }
+          }, 600);
+        }
+      } else if (currentSessionId) {
+        // Data already loaded, check if translation is needed
+        const storedLocale = localStorage.getItem('reportCurrentLocale') || 'en';
+        if (storedLocale !== locale) {
+          translationTimeout = setTimeout(() => {
+            if (isMounted) {
+              fetchTranslations(locale);
+            }
+          }, 300);
+        }
+      }
+    };
+
+    initializeData();
+
+    const handleBeforeUnload = () => {
+      clearReportData();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      isMounted = false;
+      if (translationTimeout) {
+        clearTimeout(translationTimeout);
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Don't clear data on unmount - only on beforeunload
+    };
+  }, [locale, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || isTranslating) return;
+    
+    const previousLocale = localStorage.getItem('reportCurrentLocale') || 'en';
+    if (previousLocale === locale) return;
+    
+    // Only trigger translation if we have data and locale actually changed
+    if (originalSections.length > 0 || originalAnalyses.length > 0 || originalExpertAnalysis || Object.keys(originalImprovedContent).length > 0) {
+      const timeoutId = setTimeout(() => fetchTranslations(locale), 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [locale, sessionId, originalSections.length, originalAnalyses.length, originalExpertAnalysis, Object.keys(originalImprovedContent).length]);
 
   const renderBenchmarkMetric = (metric: any, label: string, showProgress = false) => {
     if (!metric) return null;
@@ -390,74 +1072,109 @@ export default function ReportAnalyzer() {
 
   return (
     <div className="flex h-screen w-full bg-gray-50">
-      <div className="w-1/4 bg-white border-r border-gray-200 p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Document Context</h2>
-          <AuthComponent />
+      <div className={`w-1/4 bg-gradient-to-b from-white to-gray-50 border-r border-gray-200 p-6 overflow-y-auto transition-all duration-300 ${isTranslating ? 'blur-md pointer-events-none opacity-75' : ''}`}>
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-900">Document Context</h2>
+          <div className="flex items-center gap-3">
+            <Link 
+              href={isTranslating ? '#' : `/${locale}`}
+              className={`p-2 rounded-lg transition-colors group ${isTranslating ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'hover:bg-gray-100'}`}
+              title="Home"
+              onClick={(e) => {
+                if (isTranslating) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-6 w-6 text-gray-600 group-hover:text-gray-900 transition-colors" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" 
+                />
+              </svg>
+            </Link>
+            <AuthComponent />
+          </div>
         </div>
         
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Upload Report</label>
-          <input
-            type="file"
-            accept=".pdf,.docx,.txt"
-            disabled={!session?.user}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file && session?.user) handleFileUpload(file);
-            }}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          {!session?.user && (
-            <p className="text-xs text-red-600 mt-2">Please log in to upload files</p>
-          )}
-        </div>
-
-        {documentMetadata ? (
-          <div className="space-y-4 mb-6">
-            <div>
-              <label className="text-sm font-medium text-gray-900">Company Name</label>
-              <input
-                type="text"
-                value={documentMetadata.companyName}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                readOnly
-              />
+        {isTranslating && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm font-medium text-blue-900">Translating content...</span>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-900">Industry</label>
-              <input
-                type="text"
-                value={documentMetadata.industry}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-900">Report Year</label>
-              <input
-                type="text"
-                value={documentMetadata.reportYear}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-900">Company Size</label>
-              <input
-                type="text"
-                value={documentMetadata.companySize}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                readOnly
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, translationProgress))}%` }}
               />
             </div>
           </div>
-        ) : (
-          <div className="text-sm text-gray-500 mb-6">Upload a report to see metadata</div>
         )}
+        
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">Upload Report</label>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".pdf,.docx,.txt"
+              disabled={!session?.user || isTranslating}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && session?.user && !isTranslating) handleFileUpload(file);
+              }}
+              className="block w-full text-sm text-gray-600 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:transition-colors file:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+          {!session?.user && (
+            <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Please log in to upload files
+            </p>
+          )}
+        </div>
+
+        <div className={`mb-6 ${isTranslating ? 'pointer-events-none opacity-50' : ''}`}>
+          <LanguageSwitcher disabled={isTranslating} />
+        </div>
+
+        <div className="mb-6">
+          <button
+            onClick={handleRefresh}
+            disabled={isTranslating}
+            className="w-full px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            title="Refresh"
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-5" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+              />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div className="w-2/4 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`w-2/4 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isTranslating ? 'blur-md pointer-events-none opacity-75' : ''}`}>
         {isLoadingReport ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -472,8 +1189,13 @@ export default function ReportAnalyzer() {
               {SECTION_LIST.map((section) => (
                 <button
                   key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={`px-6 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                  onClick={() => !isTranslating && setActiveSection(section.id)}
+                  disabled={isTranslating}
+                  className={`px-6 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
+                    isTranslating
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer'
+                  } ${
                     activeSection === section.id
                       ? 'border-blue-700 text-blue-700 bg-blue-50 font-semibold'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -487,9 +1209,9 @@ export default function ReportAnalyzer() {
             <div className="p-4 border-b border-gray-200 flex gap-2 flex-wrap">
               <button
                 onClick={handleAIImprove}
-                disabled={!sessionId || isImproving}
+                disabled={!sessionId || isImproving || isTranslating}
                 className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${
-                  !sessionId || isImproving
+                  !sessionId || isImproving || isTranslating
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800 cursor-pointer'
                 }`}
@@ -498,9 +1220,9 @@ export default function ReportAnalyzer() {
               </button>
               <button
                 onClick={handleAnalyze}
-                disabled={!sessionId || isLoadingAnalysis}
+                disabled={!sessionId || isLoadingAnalysis || isTranslating}
                 className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${
-                  !sessionId || isLoadingAnalysis
+                  !sessionId || isLoadingAnalysis || isTranslating
                     ? 'bg-gray-400 cursor-not-allowed'
                     : activeView === 'expert' && expertAnalysis
                       ? 'bg-green-800 text-white shadow-md font-semibold'
@@ -510,10 +1232,10 @@ export default function ReportAnalyzer() {
                 {isLoadingAnalysis ? '⏳ Analyzing...' : '🔍 Expert Analysis'}
               </button>
               <button
-                onClick={() => setActiveView('insights')}
-                disabled={!sessionId}
+                onClick={() => !isTranslating && setActiveView('insights')}
+                disabled={!sessionId || isTranslating}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  !sessionId
+                  !sessionId || isTranslating
                     ? 'bg-gray-400 cursor-not-allowed'
                     : activeView === 'insights'
                       ? 'bg-purple-800 text-white shadow-md cursor-pointer'
@@ -528,12 +1250,15 @@ export default function ReportAnalyzer() {
               <textarea
                 value={currentSection.content}
                 onChange={(e) => {
-                  setSections(prev => prev.map(s => 
-                    s.id === activeSection ? { ...s, content: e.target.value } : s
-                  ));
+                  if (!isTranslating) {
+                    setSections(prev => prev.map(s => 
+                      s.id === activeSection ? { ...s, content: e.target.value } : s
+                    ));
+                  }
                 }}
+                disabled={isTranslating}
                 placeholder={`Start writing ${currentSection.title.toLowerCase()}...`}
-                className="w-full h-full resize-none border-none outline-none text-gray-800 text-base leading-relaxed"
+                className="w-full h-full resize-none border-none outline-none text-gray-800 text-base leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ fontFamily: 'inherit' }}
               />
             </div>
@@ -545,7 +1270,7 @@ export default function ReportAnalyzer() {
         )}
       </div>
 
-      <div className="w-1/4 bg-gray-50 p-6 overflow-y-auto">
+      <div className={`w-1/4 bg-gray-50 p-6 overflow-y-auto transition-all duration-300 ${isTranslating ? 'blur-md pointer-events-none opacity-75' : ''}`}>
         <h2 className="text-xl font-bold mb-4 text-gray-900">AI Insights</h2>
 
         {isLoadingAnalysis && (

@@ -12,7 +12,11 @@ const localeNames: Record<Locale, string> = {
   de: 'Deutsch'
 };
 
-export default function LanguageSwitcher() {
+interface LanguageSwitcherProps {
+  disabled?: boolean;
+}
+
+export default function LanguageSwitcher({ disabled = false }: LanguageSwitcherProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isTranslating, setIsTranslating] = useState(false);
@@ -34,8 +38,8 @@ export default function LanguageSwitcher() {
   }, []);
 
   const switchLocale = (locale: Locale) => {
-    // Don't switch if translation is in progress
-    if (isTranslating) return;
+    // Don't switch if translation is in progress or disabled
+    if (isTranslating || disabled) return;
 
     // Remove current locale from pathname and add new one
     const segments = pathname.split('/').filter(Boolean);
@@ -54,22 +58,27 @@ export default function LanguageSwitcher() {
 
   const currentLocale = pathname.split('/')[1] as Locale || 'en';
 
+  const pathnameLower = pathname.toLowerCase();
+  const isAnalyzerRoute = pathnameLower.includes('/analyzer');
+  
   return (
     <div className="flex gap-2 flex-wrap">
       {locales.map((locale) => (
         <button
           key={locale}
           onClick={() => switchLocale(locale)}
-          disabled={isTranslating}
+          disabled={isTranslating || disabled}
           className={`px-3 py-1.5 rounded text-sm transition-colors relative ${
-            isTranslating
+            isTranslating || disabled
               ? 'opacity-50 cursor-not-allowed'
               : currentLocale === locale
-              ? 'bg-white text-blue-600 font-medium shadow-md'
-              : 'bg-white/20 text-white hover:bg-white/30'
-          }
-          ${isTranslating ? 'opacity-50 cursor-not-allowed': ''}    
-          `}
+              ? isAnalyzerRoute
+                ? 'bg-blue-600 text-white font-medium shadow-md'
+                : 'bg-white text-blue-600 font-medium shadow-md'
+              : isAnalyzerRoute
+                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300 border border-gray-300'
+                : 'bg-white/20 text-white hover:bg-white/30'
+          }`}
         >
           {localeNames[locale]}
           {isTranslating && currentLocale === locale && (

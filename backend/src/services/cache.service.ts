@@ -263,9 +263,29 @@ class CacheService{
             const key = `report:${sessionId}`;
             const importantChunks: Array<{ chunkId: string, text: string, analysis: string }> = [];
 
+            // Parse analyses to calculate importance scores (non-blocking)
             for (const item of report.analyses) {
                 try {
-                    const analysisJson = JSON.parse(item.analysis);
+                    let analysisText = item.analysis?.trim() || '';
+                    if (!analysisText) continue;
+                    
+                    // Remove markdown code blocks if present
+                    const codeBlockMatch = analysisText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                    if (codeBlockMatch) {
+                        analysisText = codeBlockMatch[1].trim();
+                    }
+                    
+                    // Find JSON boundaries
+                    const firstBrace = analysisText.indexOf('{');
+                    const lastBrace = analysisText.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+                        analysisText = analysisText.substring(firstBrace, lastBrace + 1);
+                    }
+                    
+                    // Remove trailing commas
+                    analysisText = analysisText.replace(/,(\s*[}\]])/g, '$1');
+                    
+                    const analysisJson = JSON.parse(analysisText);
                     const metrics = analysisJson.analysis || analysisJson;
                     
                     // Score calculation: complexity + sentiment + risk factors
@@ -282,21 +302,26 @@ class CacheService{
                         importantChunks.push(item);
                     }
                 } catch (parseErr) {
-                    console.warn(`[CACHE SERVICE] Could not parse analysis for chunk ${item.chunkId}`);
+                    // Silently continue - analysis parsing failure doesn't prevent caching
+                    // Only log if it's not a common parsing error
+                    if (!(parseErr instanceof SyntaxError)) {
+                        console.warn(`[CACHE SERVICE] Could not parse analysis for chunk ${item.chunkId}:`, parseErr instanceof Error ? parseErr.message : String(parseErr));
+                    }
                 }
             }
 
+            // Always cache the report, even if no analyses could be parsed
             const cacheData = {
-                metadata: report.metadata,
-                sentiment: report.sentiment,
-                analyses: report.analyses,
+                metadata: report.metadata || {},
+                sentiment: report.sentiment || 'neutral',
+                analyses: report.analyses || [],
                 chunks: report.chunks || [],
                 importantChunks: importantChunks,
                 timestamp: new Date().toISOString()
             };
 
             await this.client.setEx(key, 86400, JSON.stringify(cacheData));
-            console.log(`[CACHE SERVICE] 💾 Cached report: ${key} (${importantChunks.length} important chunks)`);
+            console.log(`[CACHE SERVICE] 💾 Cached report: ${key} (${report.chunks?.length || 0} chunks, ${importantChunks.length} important chunks)`);
         } catch (err) {
             console.error('[CACHE SERVICE] Error caching report:', err);
             throw err;

@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { sessionService } from "../services/session.service";
 import { cacheService } from "../services/cache.service";
 import { dbService } from "../services/db.service";
+import { translateLingoService } from "../services/translate-lingo.service";
 
 // Ingestion controller
 export class IngestController {
@@ -89,6 +90,10 @@ export class IngestController {
             const event = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`
             res.write(event)
         }
+        
+        // Track English versions for DB storage
+        let englishQuestion: string | null = null
+        let englishAnswer: string | null = null
 
         try{
             const { question, locale } = req.body
@@ -107,6 +112,17 @@ export class IngestController {
                 sendEvent('session', { sessionId })
             }
 
+            // Translate question to English for DB storage
+            englishQuestion = question
+            if (currentLocale !== 'en') {
+                try {
+                    englishQuestion = await translateLingoService.translate(question, 'en', currentLocale)
+                } catch (error) {
+                    console.error('[INGEST CONTROLLER] Error translating question to English:', error)
+                    englishQuestion = question
+                }
+            }
+
             // Save to DB if user is logged in
             let dbSessionId: bigint | null = null
             if (req.user && req.user.googleId && req.user.email) {
@@ -119,16 +135,24 @@ export class IngestController {
                     const chatSession = await dbService.getOrCreateChatSession(sessionId, user.id)
                     dbSessionId = chatSession.id
                     
-                    // Save user message
+                    // Save user message in English to DB
                     await dbService.createUserMessage(
                         dbSessionId,
-                        question,
-                        currentLocale,
-                        currentLocale === 'en' ? question : undefined
+                        englishQuestion as string,
+                        'en',
+                        undefined
                     )
                 } catch (dbError) {
                     console.error('[INGEST CONTROLLER] DB error (continuing):', dbError)
                 }
+            }
+
+            // Wrapper to intercept complete event and extract English answer
+            const wrappedSendEvent = (type: string, data: any) => {
+                if (type === 'complete' && data.englishAnswer) {
+                    englishAnswer = data.englishAnswer
+                }
+                sendEvent(type, data)
             }
 
             // Stream the RAG process
@@ -137,18 +161,18 @@ export class IngestController {
                 question,
                 sessionId,
                 currentLocale,
-                sendEvent,
+                wrappedSendEvent,
                 (answer: string) => { finalAnswer = answer }
             )
 
-            // Save assistant message to DB if user is logged in
-            if (dbSessionId && finalAnswer) {
+            // Save assistant message in English to DB if user is logged in
+            if (dbSessionId && englishAnswer) {
                 try {
                     await dbService.createAssistantMessage(
                         dbSessionId,
-                        finalAnswer,
-                        currentLocale,
-                        currentLocale === 'en' ? finalAnswer : undefined
+                        englishAnswer,
+                        'en',
+                        undefined
                     )
                 } catch (dbError) {
                     console.error('[INGEST CONTROLLER] DB error saving assistant message:', dbError)

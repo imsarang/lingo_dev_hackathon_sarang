@@ -40,6 +40,12 @@ class TranslateLingoService {
      * Translate text using Lingo.dev
      */
     async translate(text: string, targetLocale: string, sourceLocale?: string): Promise<string> {
+        // Skip translation if source and target locales are the same
+        const srcLocale = sourceLocale || 'en';
+        if (srcLocale === targetLocale) {
+            return text;
+        }
+
         if (!this.engine) {
             console.warn('[TRANSLATE LINGO] Engine not initialized, returning original text')
             return text
@@ -82,6 +88,14 @@ class TranslateLingoService {
         sourceLocale: string | undefined,
         onToken: (token: string, accumulated: string) => void
     ): Promise<string> {
+        // Skip translation if source and target locales are the same
+        const srcLocale = sourceLocale || 'en';
+        if (srcLocale === targetLocale) {
+            // Still call onToken with the original text for consistency
+            onToken(text, text);
+            return text;
+        }
+
         if (!this.engine) {
             return text
         }

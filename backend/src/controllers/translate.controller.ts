@@ -1,22 +1,20 @@
 import { Request, Response } from "express";
-import { translateService } from "../services/translate.service";
+import { translateLingoService } from "../services/translate-lingo.service";
 
 class TranslateController{
 
     async getTranslation(req: Request, res: Response){
-        // Set SSE headers
         res.setHeader('Content-Type', 'text/event-stream')
         res.setHeader('Cache-Control', 'no-cache')
         res.setHeader('Connection', 'keep-alive')
         res.setHeader('Access-Control-Allow-Origin', '*')
 
-        // Helper to send SSE events
         const sendEvent = (type: string, data: any) => {
             res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
         }
 
         try {
-            const {messages, targetLocale} = req.body
+            const {messages, targetLocale, sourceLocale} = req.body
 
             if(!messages || !Array.isArray(messages) || messages.length === 0){
                 sendEvent('error', {message: 'No messages provided'})
@@ -30,8 +28,63 @@ class TranslateController{
                 return
             }
 
-            // Translate messages and stream results
-            await translateService.translateMessages(messages, targetLocale, sendEvent)
+            const srcLocale = sourceLocale || 'en';
+
+            // Skip translation if source and target locales are the same
+            if (srcLocale === targetLocale) {
+                const translatedMessages = messages.map((msg: any) => ({ ...msg }));
+                sendEvent('complete', {
+                    messages: translatedMessages
+                });
+                res.end();
+                return;
+            }
+
+            const translatedMessages: any[] = []
+            
+            for (let index = 0; index < messages.length; index++) {
+                const message = messages[index];
+                const content = message.content || '';
+                
+                if (!content.trim()) {
+                    translatedMessages.push({ ...message, content: content });
+                    sendEvent('message', {
+                        index,
+                        message: { ...message, content: content }
+                    });
+                    continue;
+                }
+
+                let accumulated = '';
+                
+                await translateLingoService.translateStream(
+                    content,
+                    targetLocale,
+                    srcLocale,
+                    (token: string, acc: string) => {
+                        accumulated = acc;
+                        sendEvent('token', {
+                            index,
+                            accumulated: acc
+                        });
+                    }
+                );
+
+                const translatedMessage = {
+                    ...message,
+                    content: accumulated || content
+                };
+                
+                translatedMessages.push(translatedMessage);
+                sendEvent('message', {
+                    index,
+                    message: translatedMessage
+                });
+            }
+
+            sendEvent('complete', {
+                messages: translatedMessages
+            });
             res.end()
         }
         catch(error){
