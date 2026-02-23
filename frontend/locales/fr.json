@@ -9,6 +9,18 @@
     "deployNow": "Déployer maintenant",
     "documentation": "Documentation"
   },
+  "home": {
+    "title": "AI Document Assistant",
+    "subtitle": "Choose how you want to interact with your documents. Chat with our AI assistant or analyze reports with advanced tools.",
+    "chat": {
+      "title": "Chat with Bot",
+      "description": "Ask questions and get answers from your documents using advanced RAG technology"
+    },
+    "analyzer": {
+      "title": "Report Analyzer",
+      "description": "Upload and analyze reports with AI-powered insights, keyword suggestions, and benchmarking"
+    }
+  },
   "chat": {
     "header": {
       "title": "Assistant IA",
