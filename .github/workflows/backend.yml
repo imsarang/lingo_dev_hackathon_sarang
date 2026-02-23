@@ -113,11 +113,30 @@ jobs:
             # Export DOCKERHUB_USERNAME for docker-compose
             export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
             
-            # Create .env file if it doesn't exist (docker-compose will use env vars from GitHub secrets if needed)
-            if [ ! -f ".env" ]; then
-              echo "Creating minimal .env file..."
-              touch .env
-            fi
+            # Create .env file with all required environment variables
+            echo "Creating .env file with environment variables..."
+            cat > .env << EOF
+DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+AWS_REGION=${{ secrets.AWS_REGION || 'us-east-1' }}
+S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
+SQS_QUEUE_URL=${{ secrets.SQS_QUEUE_URL || '' }}
+ENABLE_SQS_CONSUMER=${{ secrets.ENABLE_SQS_CONSUMER || 'false' }}
+HUGGINGFACE_API_KEY=${{ secrets.HUGGINGFACE_API_KEY }}
+HUGGINGFACE_MODEL=${{ secrets.HUGGINGFACE_MODEL || 'meta-llama/Meta-Llama-3-8B-Instruct' }}
+EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'huggingface' }}
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || '' }}
+LINGO_DOT_DEV_API_KEY=${{ secrets.LINGO_DOT_DEV_API_KEY }}
+NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+DATABASE_URL=${{ secrets.DATABASE_URL }}
+CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+PORT=3001
+EOF
+            echo ".env file created successfully"
             
             # Pull latest image and restart services
             echo "Pulling latest Docker image..."
