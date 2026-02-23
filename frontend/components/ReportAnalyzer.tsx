@@ -1071,7 +1071,23 @@ export default function ReportAnalyzer() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-gray-50">
+    <div className="flex h-screen w-full bg-gray-50 relative">
+      {/* Translation Loading Overlay */}
+      {isTranslating && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-xl flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-700 font-medium">Translating content...</p>
+            <div className="w-64 bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, translationProgress))}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className={`w-1/4 bg-gradient-to-b from-white to-gray-50 border-r border-gray-200 p-6 overflow-y-auto transition-all duration-300 ${isTranslating ? 'blur-md pointer-events-none opacity-75' : ''}`}>
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Document Context</h2>

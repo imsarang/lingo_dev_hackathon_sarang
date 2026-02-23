@@ -10,15 +10,15 @@
     "documentation": "प्रलेखन"
   },
   "home": {
-    "title": "AI Document Assistant",
-    "subtitle": "Choose how you want to interact with your documents. Chat with our AI assistant or analyze reports with advanced tools.",
+    "title": "AI दस्तावेज़ सहायक",
+    "subtitle": "चुनें कि आप अपने दस्तावेज़ों के साथ कैसे बातचीत करना चाहते हैं। हमारे AI सहायक के साथ चैट करें या उन्नत उपकरणों के साथ रिपोर्ट का विश्लेषण करें।",
     "chat": {
-      "title": "Chat with Bot",
-      "description": "Ask questions and get answers from your documents using advanced RAG technology"
+      "title": "बॉट के साथ चैट करें",
+      "description": "उन्नत RAG तकनीक का उपयोग करके अपने दस्तावेज़ों से प्रश्न पूछें और उत्तर प्राप्त करें"
     },
     "analyzer": {
-      "title": "Report Analyzer",
-      "description": "Upload and analyze reports with AI-powered insights, keyword suggestions, and benchmarking"
+      "title": "रिपोर्ट विश्लेषक",
+      "description": "AI-संचालित अंतर्दृष्टि, कीवर्ड सुझाव और बेंचमार्किंग के साथ रिपोर्ट अपलोड और विश्लेषण करें"
     }
   },
   "chat": {

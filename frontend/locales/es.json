@@ -10,15 +10,15 @@
     "documentation": "Documentación"
   },
   "home": {
-    "title": "AI Document Assistant",
-    "subtitle": "Choose how you want to interact with your documents. Chat with our AI assistant or analyze reports with advanced tools.",
+    "title": "Asistente de Documentos con IA",
+    "subtitle": "Elige cómo quieres interactuar con tus documentos. Chatea con nuestro asistente de IA o analiza informes con herramientas avanzadas.",
     "chat": {
-      "title": "Chat with Bot",
-      "description": "Ask questions and get answers from your documents using advanced RAG technology"
+      "title": "Chatear con el Bot",
+      "description": "Haz preguntas y obtén respuestas de tus documentos usando tecnología RAG avanzada"
     },
     "analyzer": {
-      "title": "Report Analyzer",
-      "description": "Upload and analyze reports with AI-powered insights, keyword suggestions, and benchmarking"
+      "title": "Analizador de Informes",
+      "description": "Sube y analiza informes con insights impulsados por IA, sugerencias de palabras clave y benchmarking"
     }
   },
   "chat": {
