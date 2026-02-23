@@ -110,6 +110,9 @@ jobs:
             # Login to Docker Hub
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             
+            # Export DOCKERHUB_USERNAME for docker-compose
+            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            
             # Create .env file if it doesn't exist (docker-compose will use env vars from GitHub secrets if needed)
             if [ ! -f ".env" ]; then
               echo "Creating minimal .env file..."
@@ -117,6 +120,20 @@ jobs:
             fi
             
             # Pull latest image and restart services
-            $COMPOSE_CMD -f docker-compose.production.yml pull
-            $COMPOSE_CMD -f docker-compose.production.yml up -d
+            echo "Pulling latest Docker image..."
+            $COMPOSE_CMD -f docker-compose.production.yml pull || {
+              echo "Failed to pull image. Check Docker Hub credentials and image name."
+              exit 1
+            }
+            
+            echo "Starting services..."
+            $COMPOSE_CMD -f docker-compose.production.yml up -d || {
+              echo "Failed to start services. Check logs with: docker compose -f docker-compose.production.yml logs"
+              exit 1
+            }
+            
+            echo "Service status:"
             $COMPOSE_CMD -f docker-compose.production.yml ps
+            
+            echo "Container logs (backend):"
+            $COMPOSE_CMD -f docker-compose.production.yml logs --tail=50 backend || true
