@@ -74,6 +74,7 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
       
       # Database Configuration
       - DATABASE_URL=${DATABASE_URL}
