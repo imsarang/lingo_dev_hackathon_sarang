@@ -115,27 +115,27 @@ jobs:
             
             # Create .env file with all required environment variables
             echo "Creating .env file with environment variables..."
-            cat > .env << EOF
-DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
-AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-AWS_REGION=${{ secrets.AWS_REGION || 'us-east-1' }}
-S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
-SQS_QUEUE_URL=${{ secrets.SQS_QUEUE_URL || '' }}
-ENABLE_SQS_CONSUMER=${{ secrets.ENABLE_SQS_CONSUMER || 'false' }}
-HUGGINGFACE_API_KEY=${{ secrets.HUGGINGFACE_API_KEY }}
-HUGGINGFACE_MODEL=${{ secrets.HUGGINGFACE_MODEL || 'meta-llama/Meta-Llama-3-8B-Instruct' }}
-EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'huggingface' }}
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || '' }}
-LINGO_DOT_DEV_API_KEY=${{ secrets.LINGO_DOT_DEV_API_KEY }}
-NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-DATABASE_URL=${{ secrets.DATABASE_URL }}
-CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-PORT=3001
-EOF
+            {
+              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}"
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}"
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+              echo "AWS_REGION=${{ secrets.AWS_REGION || 'us-east-1' }}"
+              echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}"
+              echo "SQS_QUEUE_URL=${{ secrets.SQS_QUEUE_URL || '' }}"
+              echo "ENABLE_SQS_CONSUMER=${{ secrets.ENABLE_SQS_CONSUMER || 'false' }}"
+              echo "HUGGINGFACE_API_KEY=${{ secrets.HUGGINGFACE_API_KEY }}"
+              echo "HUGGINGFACE_MODEL=${{ secrets.HUGGINGFACE_MODEL || 'meta-llama/Meta-Llama-3-8B-Instruct' }}"
+              echo "EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'huggingface' }}"
+              echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || '' }}"
+              echo "LINGO_DOT_DEV_API_KEY=${{ secrets.LINGO_DOT_DEV_API_KEY }}"
+              echo "NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}"
+              echo "NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}"
+              echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
+              echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
+              echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+              echo "CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}"
+              echo "PORT=3001"
+            } > .env
             echo ".env file created successfully"
             
             # Pull latest image and restart services
