@@ -4,6 +4,7 @@ An intelligent document analysis platform that helps you interact with your docu
 
 DEMO : https://www.youtube.com/watch?v=y5LR4aizQUg
 
+deployed link : https://lingodevhackathonsarangdeploy.vercel.app/en
 ## Overview
 
 AI Document Assistant is a comprehensive platform designed to break down language barriers in document analysis and interaction. Through its intelligent chatbot interface, users can engage in natural conversations about their documents, asking questions and receiving detailed answers powered by advanced RAG technology. The report analyzer feature provides deep insights, keyword suggestions, and benchmarking for financial documents. The platform can be expanded to support personal documents, tax documents, legal documents, property documents, and much more, enabling users to read and analyze content in their preferred language. By offering real-time translation and multi-language support, the system aims to completely remove language barriers, making document analysis accessible to users worldwide regardless of their native language.
@@ -56,7 +57,7 @@ The platform breaks down language barriers by providing comprehensive multi-lang
 - **Language Switcher**: Easy-to-use dropdown component for switching languages on any page
 - **Translation Workflow**: Automated CI/CD workflow that translates new content when English source files are updated
 - **Context Preservation**: Maintains document context and meaning during translation
-- **GPT-4 Powered Translation**: Uses OpenAI's GPT-4o-mini model for high-quality, context-aware translations
+- **High-Quality Translation**: Provides context-aware translations through Lingo.dev's translation service
 - **Persistent Language Preference**: Remembers user's language choice across sessions
 
 ### Document Upload & Processing
@@ -78,7 +79,7 @@ Robust document handling system that supports multiple file formats and processi
 
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Backend**: Express.js, TypeScript, Node.js
-- **AI/ML**: OpenAI, HuggingFace, LangChain
+- **AI/ML**: HuggingFace, LangChain
 - **Vector Database**: ChromaDB
 - **Database**: PostgreSQL (Prisma ORM)
 - **Caching**: Redis
@@ -133,10 +134,9 @@ npm run dev
 - **TypeScript**: Shared type safety between frontend and backend ensures consistency. Enables better IDE support and catches errors at compile time.
 - **Node.js**: Single language (JavaScript/TypeScript) across the entire stack reduces context switching. Excellent for I/O-intensive operations like file processing and API calls. Large ecosystem of packages.
 
-### AI/ML: OpenAI, HuggingFace, LangChain
+### AI/ML: HuggingFace, LangChain
 
-- **OpenAI**: Used for high-quality text generation, sentiment analysis, and report analysis. GPT-4o-mini provides excellent balance between cost and performance for translation and content generation tasks.
-- **HuggingFace**: Provides access to open-source language models (Meta-Llama-3-8B-Instruct) for RAG-based chat functionality. Cost-effective alternative for conversational AI while maintaining quality.
+- **HuggingFace**: Provides access to open-source language models (Meta-Llama-3-8B-Instruct) for RAG-based chat functionality. Cost-effective solution for conversational AI, sentiment analysis, and report analysis while maintaining quality.
 - **LangChain**: Framework for building LLM applications simplifies prompt management, chain composition, and integration with vector databases. Provides abstractions for RAG workflows.
 
 ### Vector Database: ChromaDB
@@ -162,7 +162,7 @@ npm run dev
 
 ### Translation: Lingo.dev
 
-- **Lingo.dev**: Specialized i18n platform that automates translation workflows. Integrates with CI/CD pipelines to automatically translate content when source files change. Uses GPT-4 for high-quality, context-aware translations. Eliminates manual translation management overhead.
+- **Lingo.dev**: Specialized i18n platform that automates translation workflows. Integrates with CI/CD pipelines to automatically translate content when source files change. Provides high-quality, context-aware translations. Eliminates manual translation management overhead.
 
 ## License
 
