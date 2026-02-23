@@ -60,7 +60,7 @@ export default function LanguageSwitcher({ disabled = false }: LanguageSwitcherP
 
   const pathnameLower = pathname.toLowerCase();
   const isAnalyzerRoute = pathnameLower.includes('/analyzer');
-  
+
   return (
     <div className="flex gap-2 flex-wrap">
       {locales.map((locale) => (
@@ -77,7 +77,7 @@ export default function LanguageSwitcher({ disabled = false }: LanguageSwitcherP
                 : 'bg-white text-blue-600 font-medium shadow-md'
               : isAnalyzerRoute
                 ? 'bg-gray-200 text-gray-700 hover:bg-gray-300 border border-gray-300'
-                : 'bg-white/20 text-white hover:bg-white/30'
+              : 'bg-white/20 text-white hover:bg-white/30'
           }`}
         >
           {localeNames[locale]}

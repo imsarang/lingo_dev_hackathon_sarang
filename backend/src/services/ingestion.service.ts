@@ -288,10 +288,10 @@ export class IngestionService {
             let englishQuestion = question
             if (locale !== 'en') {
                 try {
-                    sendEvent('status', { 
-                        status: 'translating',
-                        message: `Translating question from ${locale} to English...`
-                    })
+                sendEvent('status', { 
+                    status: 'translating',
+                    message: `Translating question from ${locale} to English...`
+                })
                     englishQuestion = await translateLingoService.translate(question, 'en', locale)
                 } catch (error) {
                     console.error('[INGESTION SERVICE] Error translating question to English:', error)

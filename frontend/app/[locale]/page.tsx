@@ -15,10 +15,10 @@ export default async function Home({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <div className="absolute top-4 right-4 flex items-center gap-3">
-        <LanguageSwitcher />
-        <AuthComponent />
-      </div>
+        <div className="absolute top-4 right-4 flex items-center gap-3">
+          <LanguageSwitcher />
+          <AuthComponent />
+        </div>
       <main className="flex min-h-screen w-full max-w-5xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black sm:items-start">
         <Image
           className="dark:invert mb-8"
@@ -46,7 +46,7 @@ export default async function Home({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
-            >
+          >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

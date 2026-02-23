@@ -16,11 +16,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+      
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
+          
       - name: Run Lingo.dev CI
         working-directory: frontend
         env:
@@ -32,7 +32,7 @@ jobs:
           rm -rf locales/*/
           # Run Lingo.dev CI - it will update existing translations when en.json changes
           npx lingo.dev@latest ci --no-interactive
-
+      
       - name: Commit and push translations
         run: |
           git config --local user.email "action@github.com"

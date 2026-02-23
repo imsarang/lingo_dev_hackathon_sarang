@@ -188,18 +188,18 @@ export default function ReportAnalyzer() {
     try {
       const currentSession = await getSession();
       const idToken = (currentSession as any)?.idToken;
-      const formData = new FormData();
-      formData.append('file', file);
-      
+    const formData = new FormData();
+    formData.append('file', file);
+    
       const response = await fetch(`${API_BASE_URL}/api/reports/upload`, {
-        method: 'POST',
+      method: 'POST',
         headers: {
           ...(idToken && { 'Authorization': `Bearer ${idToken}` })
         },
-        body: formData
-      });
+      body: formData
+    });
       
-      const result = await response.json();
+    const result = await response.json();
       
       if (!result.success) {
         alert('Upload failed: ' + result.message);
@@ -214,26 +214,26 @@ export default function ReportAnalyzer() {
       setAnalyses(analysesData);
       setOriginalAnalyses(analysesData);
 
-      setDocumentMetadata({
-        companyName: data.metadata.company || 'Unknown',
-        industry: data.metadata.documentType || 'Unknown',
-        reportYear: data.metadata.year?.toString() || new Date().getFullYear().toString(),
+    setDocumentMetadata({
+      companyName: data.metadata.company || 'Unknown',
+      industry: data.metadata.documentType || 'Unknown',
+      reportYear: data.metadata.year?.toString() || new Date().getFullYear().toString(),
         companySize: 'Unknown',
         riskCount: 0,
-        positiveSignals: 0,
+      positiveSignals: 0,
         sentimentScore: 0,
-        complexityScore: 0
-      });
-
-      const sectionContent: Record<string, string> = {};
-      data.chunks.forEach((chunk: any) => {
+      complexityScore: 0
+    });
+    
+    const sectionContent: Record<string, string> = {};
+    data.chunks.forEach((chunk: any) => {
         const sectionId = SECTION_TYPE_MAP[chunk.sectionType] || 'executive-summary';
         sectionContent[sectionId] = (sectionContent[sectionId] || '') + chunk.text + '\n\n';
       });
       
       let updatedSections = sections.map(section => ({
-        ...section,
-        content: sectionContent[section.id] || section.content
+      ...section,
+      content: sectionContent[section.id] || section.content
       }));
 
       if (locale !== 'en') {
@@ -1042,15 +1042,15 @@ export default function ReportAnalyzer() {
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${badge.class}`}>
             {badge.text}
           </span>
-        </div>
+            </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
+            <div>
             <span className="text-gray-600">Current: </span>
             <span className="text-gray-900 font-medium capitalize">
               {typeof metric.current === 'string' ? metric.current : metric.current}
             </span>
-          </div>
-          <div>
+            </div>
+            <div>
             <span className="text-gray-600">Industry Avg: </span>
             <span className="text-gray-900 font-medium">{metric.industryAvg}</span>
           </div>
@@ -1063,8 +1063,8 @@ export default function ReportAnalyzer() {
                 metric.status === 'below' ? 'bg-red-500' : 'bg-yellow-500'
               }`}
               style={{ width: `${Math.min(100, (metric.current / metric.industryAvg) * 100)}%` }}
-            />
-          </div>
+              />
+            </div>
         )}
       </div>
     );
@@ -1102,22 +1102,22 @@ export default function ReportAnalyzer() {
               </svg>
             </Link>
             <AuthComponent />
+            </div>
           </div>
-        </div>
         
         {isTranslating && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
               <span className="text-sm font-medium text-blue-900">Translating content...</span>
-            </div>
+                </div>
             <div className="w-full bg-blue-200 rounded-full h-2">
               <div 
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${Math.max(0, Math.min(100, translationProgress))}%` }}
               />
-            </div>
-          </div>
+                </div>
+                </div>
         )}
         
         <div className="mb-6">
@@ -1133,7 +1133,7 @@ export default function ReportAnalyzer() {
               }}
               className="block w-full text-sm text-gray-600 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:transition-colors file:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             />
-          </div>
+                </div>
           {!session?.user && (
             <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -1142,11 +1142,11 @@ export default function ReportAnalyzer() {
               Please log in to upload files
             </p>
           )}
-        </div>
+              </div>
 
         <div className={`mb-6 ${isTranslating ? 'pointer-events-none opacity-50' : ''}`}>
           <LanguageSwitcher disabled={isTranslating} />
-        </div>
+            </div>
 
         <div className="mb-6">
           <button
@@ -1171,7 +1171,7 @@ export default function ReportAnalyzer() {
             </svg>
             Refresh
           </button>
-        </div>
+          </div>
       </div>
 
       <div className={`w-2/4 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isTranslating ? 'blur-md pointer-events-none opacity-75' : ''}`}>
@@ -1185,30 +1185,30 @@ export default function ReportAnalyzer() {
           </div>
         ) : (
           <>
-            <div className="border-b border-gray-200 flex overflow-x-auto">
+        <div className="border-b border-gray-200 flex overflow-x-auto">
               {SECTION_LIST.map((section) => (
-                <button
-                  key={section.id}
+            <button
+              key={section.id}
                   onClick={() => !isTranslating && setActiveSection(section.id)}
                   disabled={isTranslating}
-                  className={`px-6 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
+              className={`px-6 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
                     isTranslating
                       ? 'opacity-50 cursor-not-allowed'
                       : 'cursor-pointer'
                   } ${
-                    activeSection === section.id
+                activeSection === section.id
                       ? 'border-blue-700 text-blue-700 bg-blue-50 font-semibold'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  {section.title}
-                </button>
-              ))}
-            </div>
+              }`}
+            >
+              {section.title}
+            </button>
+          ))}
+        </div>
 
-            <div className="p-4 border-b border-gray-200 flex gap-2 flex-wrap">
-              <button
-                onClick={handleAIImprove}
+        <div className="p-4 border-b border-gray-200 flex gap-2 flex-wrap">
+          <button
+            onClick={handleAIImprove}
                 disabled={!sessionId || isImproving || isTranslating}
                 className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${
                   !sessionId || isImproving || isTranslating
@@ -1217,9 +1217,9 @@ export default function ReportAnalyzer() {
                 }`}
               >
                 {isImproving ? '⏳ Improving...' : '✨ AI Improve'}
-              </button>
-              <button
-                onClick={handleAnalyze}
+          </button>
+          <button
+            onClick={handleAnalyze}
                 disabled={!sessionId || isLoadingAnalysis || isTranslating}
                 className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${
                   !sessionId || isLoadingAnalysis || isTranslating
@@ -1230,8 +1230,8 @@ export default function ReportAnalyzer() {
                 }`}
               >
                 {isLoadingAnalysis ? '⏳ Analyzing...' : '🔍 Expert Analysis'}
-              </button>
-              <button
+          </button>
+          <button
                 onClick={() => !isTranslating && setActiveView('insights')}
                 disabled={!sessionId || isTranslating}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -1243,13 +1243,13 @@ export default function ReportAnalyzer() {
                 }`}
               >
                 💡 AI Insights
-              </button>
-            </div>
+          </button>
+        </div>
 
-            <div className="flex-1 p-6 overflow-y-auto">
-              <textarea
-                value={currentSection.content}
-                onChange={(e) => {
+        <div className="flex-1 p-6 overflow-y-auto">
+          <textarea
+            value={currentSection.content}
+            onChange={(e) => {
                   if (!isTranslating) {
                     setSections(prev => prev.map(s => 
                       s.id === activeSection ? { ...s, content: e.target.value } : s
@@ -1257,15 +1257,15 @@ export default function ReportAnalyzer() {
                   }
                 }}
                 disabled={isTranslating}
-                placeholder={`Start writing ${currentSection.title.toLowerCase()}...`}
+            placeholder={`Start writing ${currentSection.title.toLowerCase()}...`}
                 className="w-full h-full resize-none border-none outline-none text-gray-800 text-base leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ fontFamily: 'inherit' }}
-              />
-            </div>
+            style={{ fontFamily: 'inherit' }}
+          />
+        </div>
 
-            <div className="p-4 border-t border-gray-200 text-sm text-gray-500">
-              {currentSection.content.length} characters
-            </div>
+        <div className="p-4 border-t border-gray-200 text-sm text-gray-500">
+          {currentSection.content.length} characters
+        </div>
           </>
         )}
       </div>
@@ -1294,11 +1294,11 @@ export default function ReportAnalyzer() {
           return (
             <>
               <div className="grid grid-cols-3 gap-3 mb-6">
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="text-xs text-gray-600 mb-2">Sentiment</div>
                   <div className="text-2xl font-bold mb-2 capitalize text-gray-900">
                     {analysisData.sentiment || 'N/A'}
-                  </div>
+            </div>
                   {analysisData.sentimentScore !== undefined && (
                     <>
                       <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
@@ -1306,17 +1306,17 @@ export default function ReportAnalyzer() {
                           className={`h-2 rounded-full ${getSentimentColor(analysisData.sentiment)}`}
                           style={{ width: `${analysisData.sentimentScore}%` }}
                         />
-                      </div>
+          </div>
                       <div className="text-xs text-gray-600">{analysisData.sentimentScore}%</div>
                     </>
                   )}
-                </div>
+        </div>
 
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="text-xs text-gray-600 mb-2">Complexity</div>
                   <div className="text-2xl font-bold mb-2 text-gray-900">
                     {analysisData.complexityScore || 'N/A'}
-                  </div>
+            </div>
                   {analysisData.complexityScore !== undefined && (
                     <>
                       <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
@@ -1324,11 +1324,11 @@ export default function ReportAnalyzer() {
                           className="bg-blue-500 h-2 rounded-full"
                           style={{ width: `${analysisData.complexityScore}%` }}
                         />
-                      </div>
+            </div>
                       <div className="text-xs text-gray-600">Score</div>
                     </>
                   )}
-                </div>
+            </div>
 
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="text-xs text-gray-600 mb-2">Readability</div>
@@ -1336,11 +1336,11 @@ export default function ReportAnalyzer() {
                     {analysisData.readability || 'N/A'}
                   </div>
                   <div className="text-xs text-gray-600">Grade Level</div>
-                </div>
-              </div>
+          </div>
+        </div>
 
               {analysisData.keyMetrics?.length > 0 && (
-                <div className="mb-6">
+        <div className="mb-6">
                   <h3 className="font-semibold mb-3 text-gray-900">Key Metrics</h3>
                   <div className="grid grid-cols-1 gap-2">
                     {analysisData.keyMetrics.map((metric: string, index: number) => (
@@ -1350,46 +1350,46 @@ export default function ReportAnalyzer() {
                       >
                         <span className="text-lg">📊</span>
                         <span className="text-sm text-gray-900 flex-1">{metric}</span>
-                      </div>
+              </div>
                     ))}
-                  </div>
-                </div>
+              </div>
+            </div>
               )}
 
               <div className="mb-6">
                 <h3 className="font-semibold mb-3 text-gray-900">Analysis Metrics</h3>
                 <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
                   {analysisData.assertiveness && (
-                    <div>
+            <div>
                       <div className="flex justify-between text-sm mb-1 text-gray-900">
-                        <span>Assertiveness</span>
+                <span>Assertiveness</span>
                         <span className="font-medium capitalize">{analysisData.assertiveness}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-purple-500 h-2 rounded-full"
                           style={{ width: `${stringToPercentage(analysisData.assertiveness)}%` }}
                         />
-                      </div>
-                    </div>
+              </div>
+            </div>
                   )}
 
                   {analysisData.riskTransparency && (
-                    <div>
+            <div>
                       <div className="flex justify-between text-sm mb-1 text-gray-900">
-                        <span>Risk Transparency</span>
+                <span>Risk Transparency</span>
                         <span className="font-medium capitalize">{analysisData.riskTransparency}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-orange-500 h-2 rounded-full"
                           style={{ width: `${stringToPercentage(analysisData.riskTransparency)}%` }}
                         />
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
+            </div>
+                  )}
+              </div>
+            </div>
 
               {analysisData.riskFactors?.length > 0 && (
                 <div className="mb-6">
@@ -1405,8 +1405,8 @@ export default function ReportAnalyzer() {
                         <div className="flex items-start gap-2">
                           <span className="text-red-600 mt-0.5">⚠️</span>
                           <span className="text-sm text-gray-900 flex-1">{risk}</span>
-                        </div>
-                      </div>
+          </div>
+        </div>
                     ))}
                   </div>
                 </div>
@@ -1418,7 +1418,7 @@ export default function ReportAnalyzer() {
         {activeView === 'expert' && expertAnalysis && (
           <div className="space-y-6">
             {expertAnalysis.expertAnalysis?.overallAssessment && (
-              <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
                 <h3 className="font-semibold mb-3 text-gray-900 flex items-center gap-2">
                   <span className="text-xl">📋</span>
                   Overall Assessment
@@ -1426,7 +1426,7 @@ export default function ReportAnalyzer() {
                 <p className="text-sm text-gray-700 leading-relaxed">
                   {expertAnalysis.expertAnalysis.overallAssessment}
                 </p>
-              </div>
+            </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
@@ -1445,8 +1445,8 @@ export default function ReportAnalyzer() {
                         <div className="flex items-start gap-2">
                           <span className="text-green-600 mt-0.5">✓</span>
                           <span className="text-sm text-gray-900 flex-1">{strength}</span>
-                        </div>
-                      </div>
+          </div>
+        </div>
                     ))}
                   </div>
                 ) : (
