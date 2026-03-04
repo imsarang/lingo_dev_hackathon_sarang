@@ -34,6 +34,27 @@ services:
     networks:
       - lingo-network
 
+  # PostgreSQL database for Prisma
+  postgres:
+    image: postgres:16-alpine
+    container_name: lingo-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-lingo}
+      - POSTGRES_USER=${POSTGRES_USER:-lingo}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-lingo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lingo-network
+
   # Backend application
   backend:
     image: ${DOCKERHUB_USERNAME}/lingo-dev-backend:latest
@@ -72,7 +93,7 @@ services:
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}
       
       # Database Configuration
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://lingo:lingo@postgres:5432/lingo?schema=public}
       
       # Redis Configuration (using service name as hostname)
       - REDIS_URL=redis://redis:6379
@@ -88,6 +109,8 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_started
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - lingo-network
@@ -95,6 +118,7 @@ services:
 volumes:
   redis_data:
   chroma_data:
+  postgres_data:
 
 networks:
   lingo-network:
