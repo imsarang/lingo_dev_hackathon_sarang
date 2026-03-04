@@ -1,19 +1,23 @@
 /**
  * API Configuration
- * Centralized configuration for API base URL
+ * Centralized configuration for API base URL.
+ *
+ * In production (Vercel), we proxy all backend calls through
+ * Next.js API route `/api/backend/*`, which then talks to the
+ * EC2 backend over HTTP using BACKEND_INTERNAL_URL (server-side).
+ *
+ * So on the client we only ever call relative URLs like:
+ *   /api/backend/api/ingest/rag/stream
  */
 
-export const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+export const API_BASE_URL = ''; // use relative URLs via proxy
 
 /**
- * Get the full API URL for an endpoint
- * @param endpoint - API endpoint path (e.g., '/api/users/upsert')
- * @returns Full URL (e.g., 'http://localhost:3001/api/users/upsert')
+ * Get the full API URL for an endpoint.
+ * Example: getApiUrl('/api/ingest/rag/stream')
+ *   => '/api/backend/api/ingest/rag/stream'
  */
 export const getApiUrl = (endpoint: string): string => {
-  // Remove leading slash if present to avoid double slashes
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  // Remove trailing slash from base URL if present
-  const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-  return `${cleanBaseUrl}${cleanEndpoint}`;
+  return `/api/backend${cleanEndpoint}`;
 };
