@@ -98,6 +98,15 @@ jobs:
                 exit 1
               }
             fi
+
+            # Ensure docker compose (plugin) or docker-compose is installed
+            if ! $DOCKER_CMD compose version &> /dev/null 2>&1 && ! command -v docker-compose &> /dev/null; then
+              echo "docker compose / docker-compose not found, installing standalone docker-compose binary..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose || {
+                echo "Failed to download docker-compose binary"
+              }
+              sudo chmod +x /usr/local/bin/docker-compose || true
+            fi
             
             # Use docker compose (v2) or docker-compose (v1)
             if $DOCKER_CMD compose version &> /dev/null 2>&1; then
