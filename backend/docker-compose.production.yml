@@ -80,9 +80,6 @@ services:
       # ChromaDB Configuration (using service name as hostname)
       - CHROMA_URL=http://chromadb:8000
       
-      # CORS Configuration
-      - CORS_ORIGIN=${CORS_ORIGIN}
-      
       # Server Configuration
       - NODE_ENV=production
       - PORT=3001
