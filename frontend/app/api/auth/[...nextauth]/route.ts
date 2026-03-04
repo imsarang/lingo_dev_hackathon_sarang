@@ -54,7 +54,7 @@ const handler = NextAuth({
 
                 if(isNewUser || !token.userSynced){
                     try{
-                        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                        const backendUrl = process.env.BACKEND_INTERNAL_URL || 'http://localhost:3001'
                         await fetch(`${backendUrl}/api/users/upsert`, {
                             method: 'POST',
                             headers: {

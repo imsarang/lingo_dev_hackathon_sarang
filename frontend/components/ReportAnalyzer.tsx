@@ -37,7 +37,7 @@ const SECTION_TYPE_MAP: Record<string, string> = {
   'other': 'executive-summary'
 };
 
-import { API_BASE_URL } from '@/config/api';
+import { getApiUrl } from '@/config/api';
 
 export default function ReportAnalyzer() {
   const params = useParams();
@@ -81,7 +81,7 @@ export default function ReportAnalyzer() {
     
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/translate`, {
+      const response = await fetch(getApiUrl('/api/translate'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -191,7 +191,7 @@ export default function ReportAnalyzer() {
     const formData = new FormData();
     formData.append('file', file);
     
-      const response = await fetch(`${API_BASE_URL}/api/reports/upload`, {
+      const response = await fetch(getApiUrl('/api/reports/upload'), {
       method: 'POST',
         headers: {
           ...(idToken && { 'Authorization': `Bearer ${idToken}` })
@@ -300,7 +300,7 @@ export default function ReportAnalyzer() {
     setIsLoadingAnalysis(true);
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/reports/analyze`, {
+      const response = await fetch(getApiUrl('/api/reports/analyze'), {
         method: 'POST',
         headers,
         body: JSON.stringify({ sessionId })
@@ -389,7 +389,7 @@ export default function ReportAnalyzer() {
     setIsImproving(true);
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/reports/improve`, {
+      const response = await fetch(getApiUrl('/api/reports/improve'), {
         method: 'POST',
         headers,
         body: JSON.stringify({ sessionId, sectionId: activeSection })
@@ -670,7 +670,7 @@ export default function ReportAnalyzer() {
     
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/translate`, {
+      const response = await fetch(getApiUrl('/api/translate'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -832,7 +832,7 @@ export default function ReportAnalyzer() {
   const restoreReportData = async (savedSessionId: string) => {
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/reports/${savedSessionId}`, {
+      const response = await fetch(getApiUrl(`/api/reports/${savedSessionId}`), {
         method: 'GET',
         headers
       });
